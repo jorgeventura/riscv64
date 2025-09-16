@@ -1099,6 +1099,29 @@ In summary, you were right to question the ranges. The description you had was i
 
 If you paste your existing `map_2m_region(...)` right below this one, you can flip a single call site to A/B test behavior (breakpoints in GDB on `ensure_l1_points_to_l0` and watch PTEs fill in).
 
+---
+In a RISC-V 64-bit system, the physical address space conceptually starts at **`0x0000_0000_0000_0000`**. However, the actual usable memory range and where the system begins execution depends on the specific hardware implementation.
+
+***
+
+## Physical Address Layout
+
+A key feature of the RISC-V architecture is its flexibility, which allows hardware designers to place memory and devices at various physical addresses. There isn't a single, universally mandated memory map.
+
+However, a common convention is:
+* **System Boot:** On reset, a RISC-V processor starts executing code from a fixed address specified by the hardware manufacturer. A very common boot address is **`0x1000`** or another address in a read-only memory (ROM) region. This initial code is responsible for setting up the machine and eventually loading a more complex program, like an operating system.
+* **DRAM (Main Memory):** The main system RAM is typically mapped to a higher address. A widely used starting address for DRAM in many RISC-V systems (especially in emulators like QEMU and development boards) is **`0x8000_0000`**.
+
+
+
+## Address Space Size
+
+While a 64-bit architecture can theoretically address up to 16 exabytes of memory ($2^{64}$ bytes), the actual supported physical address size is defined by the specific memory management scheme being used. For instance:
+* **Sv39 Paging:** Supports a **56-bit physical address space**, allowing access to 256 petabytes.
+* **Sv48 Paging:** Supports a **56-bit physical address space**.
+* **Sv57 Paging:** Supports a **57-bit physical address space**, allowing access to 512 petabytes.
+
+In summary, while the absolute lowest physical address is zero, the first address the CPU fetches instructions from is determined by its boot ROM, and the main memory (DRAM) is typically located at a different, higher address like `0x8000_0000`.
 
 
 
