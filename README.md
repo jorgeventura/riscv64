@@ -13,9 +13,9 @@ In Sv39, a **64-bit virtual address** is divided as:
     sign bits         VPN[2]            VPN[1]          VPN[0]          page offset
 ```
 
-* **VPN\[2]** → index into **L2** (root) table
-* **VPN\[1]** → index into **L1** table
-* **VPN\[0]** → index into **L0** table (or use a superpage entry at L1/L2)
+* **VPN[2]** → index into **L2** (root) table
+* **VPN[1]** → index into **L1** table
+* **VPN[0]** → index into **L0** table (or use a superpage entry at L1/L2)
 * **page offset** → offset within the 4 KiB page
 
 ---
@@ -64,11 +64,11 @@ we map large 2 MiB pages at L1, so the walk usually stops at L1.
 
 Say you want VA `0x0000_0000_8020_0000` → PA `0x0000_0000_8020_0000`.
 
-1. Extract VA\[38:30] → index into `L2`.
+1. Extract VA[38:30] → index into `L2`.
 2. That entry points to `L1_id`.
-3. Use VA\[29:21] to select a PTE in `L1_id`.
+3. Use VA[29:21] to select a PTE in `L1_id`.
 4. That entry is a **leaf**, giving PPN (physical page number) for 2 MiB superpage.
-5. Combine PPN with VA\[20:12] + page offset.
+5. Combine PPN with VA[20:12] + page offset.
 
 Result: VA == PA.
 
@@ -78,9 +78,9 @@ Result: VA == PA.
 
 Say you want VA `0xffff_ffc0_8020_0000` → PA `0x0000_0000_8020_0000`.
 
-1. Extract VA\[38:30] (these high addresses are sign-extended, so top 25 bits are 1).
+1. Extract VA[38:30] (these high addresses are sign-extended, so top 25 bits are 1).
 2. That index in `L2` points to `L1_hi`.
-3. Use VA\[29:21] to select entry in `L1_hi`.
+3. Use VA[29:21] to select entry in `L1_hi`.
 4. Leaf entry → points to the same PA as above.
 
 Result: Kernel sees itself in higher-half VA, but hardware fetches instructions/data from low PA.
@@ -99,8 +99,8 @@ Result: Kernel sees itself in higher-half VA, but hardware fetches instructions/
 * `L2[512]` is the Sv39 root page table.
 * `L1_id[512]` = subordinate L1 for identity mappings.
 * `L1_hi[512]` = subordinate L1 for higher-half mappings.
-* VA\[38:30] selects the slot in L2. That slot either points to L1\_id or L1\_hi.
-* VA\[29:21] selects the slot in the L1, which holds a leaf mapping (2 MiB pages in your demo).
+* VA[38:30] selects the slot in L2. That slot either points to L1_id or L1_hi.
+* VA[29:21] selects the slot in the L1, which holds a leaf mapping (2 MiB pages in your demo).
 
 ---
 
@@ -114,14 +114,14 @@ A 64-bit VA is divided like this:
 ```
 
 * **Page offset (11..0)** → selects byte inside a 4 KiB page.
-* **VPN\[0..2] (30..12 bits)** → 27 bits total, used to index page tables.
+* **VPN[0..2] (30..12 bits)** → 27 bits total, used to index page tables.
 * **Bits 63..39** must be a **sign extension** of bit 38 (canonical addresses).
 
 ---
 
 ## 2. Size of the Sv39 virtual space
 
-* VPN\[2:0] = 27 bits → up to `2^27 = 134,217,728` entries.
+* VPN[2:0] = 27 bits → up to `2^27 = 134,217,728` entries.
 * Each entry maps one 4 KiB page → total = `2^27 × 4 KiB = 2^39 = 512 GiB`.
 
 So yes: the usable virtual address space in Sv39 is **512 GiB** (256 GiB “low half” + 256 GiB “high half”).
@@ -134,8 +134,8 @@ That matches what you wrote: `0x8000_0000_00` = 512 GiB.
 They are not part of the translation walk in Sv39.
 Instead, they must be a **sign-extension** of bit 38:
 
-* If VA\[38] = 0 → bits 63..39 must all be 0. → **low half**: `0x0000_0000_0000_0000 – 0x0000_007F_FFFF_FFFF`.
-* If VA\[38] = 1 → bits 63..39 must all be 1. → **high half**: `0xFFFF_FF80_0000_0000 – 0xFFFF_FFFF_FFFF_FFFF`.
+* If VA[38] = 0 → bits 63..39 must all be 0. → **low half**: `0x0000_0000_0000_0000 – 0x0000_003F_FFFF_FFFF`.
+* If VA[38] = 1 → bits 63..39 must all be 1. → **high half**: `0xFFFF_FFC0_0000_0000 – 0xFFFF_FFFF_FFFF_FFFF`.
 
 Any address that is not canonical (wrong sign extension) raises a page fault.
 
@@ -157,9 +157,9 @@ When you enable paging:
 2. CPU sets `MODE=Sv39` in `satp`.
 3. On the next memory access, hardware walks the page tables:
 
-   * Take VA bits \[38:30], index into L2.
-   * Take VA bits \[29:21], index into L1.
-   * Take VA bits \[20:12], index into L0 (if used).
+   * Take VA bits [38:30], index into L2.
+   * Take VA bits [29:21], index into L1.
+   * Take VA bits [20:12], index into L0 (if used).
    * Read the PPN (physical page number) from the leaf PTE.
    * Concatenate with page offset → **physical address**.
 
@@ -179,7 +179,7 @@ That’s the exact moment the mapping happens: on every load/store/fetch after p
 👉 Do you want me to show with a worked example:
 Take VA `0xffff_ffc0_8020_0000`, walk through your `L2 → L1_hi` tables, and show exactly how it resolves to PA `0x0000_0000_8020_0000`?
 
-awesome—let’s walk one concrete Sv39 translation **end-to-end** with the exact tables you sketched (L2 root → L1\_hi for higher-half, using 2 MiB leaves).
+awesome—let’s walk one concrete Sv39 translation **end-to-end** with the exact tables you sketched (L2 root → L1_hi for higher-half, using 2 MiB leaves).
 
 We’ll translate this virtual address:
 
@@ -220,7 +220,7 @@ For `VA = 0xffff_ffc0_8020_0000`:
 You filled:
 
 * `L2[VPN2=0x102]` = **pointer PTE** to `L1_hi` (Valid=1, R/W/X=0 → non-leaf).
-* `L1_hi[VPN1=0x1]` = **leaf PTE at level-1** mapping a **2 MiB superpage** whose base **PA = 0x0000\_0000\_8020\_0000**.
+* `L1_hi[VPN1=0x1]` = **leaf PTE at level-1** mapping a **2 MiB superpage** whose base **PA = 0x0000_0000_8020_0000**.
   (Because it’s a level-1 leaf, the mapping granularity is 2 MiB, and the **PPN0** bits must be zero → PA must be 2 MiB-aligned. `0x8020_0000` is aligned: `0x20_0000` = 2 MiB.)
 
 PTE flags on the leaf: `V=1, R/W/X as you want, plus A/D` (if you’re pre-setting them).
@@ -292,13 +292,13 @@ You picked `0x8020_0000` (2 MiB-aligned), so it’s valid as an L1 leaf.
 
 * **Given**: `VA = 0xffff_ffc0_8020_0000`
 * **Indices**: `VPN2=0x102 → L2`, `VPN1=0x1 → L1_hi leaf`, `VPN0=0`
-* **Leaf**: L1\_hi\[1] maps 2 MiB at **PA base = 0x8020\_0000**
+* **Leaf**: L1_hi[1] maps 2 MiB at **PA base = 0x8020_0000**
 * **Result**: `PA = 0x8020_0000 (+ offset if any)`
 * Example with offset: `VA=…1234 → PA=0x8020_1234`.
 
-If you want, I can drop a tiny GDB helper (or a C debug print) that, given a VA, prints the **L2/L1 indices + whether it hits your L1\_hi or L1\_id table**, so you can watch the mapping live while single-stepping.
+If you want, I can drop a tiny GDB helper (or a C debug print) that, given a VA, prints the **L2/L1 indices + whether it hits your L1_hi or L1_id table**, so you can watch the mapping live while single-stepping.
 
-Great question—the short answer is: **because `L2` is indexed by VA bits \[38:30] (VPN2), and for `0x0000_0000_8020_0000` those bits equal `2`.**
+Great question—the short answer is: **because `L2` is indexed by VA bits [38:30] (VPN2), and for `0x0000_0000_8020_0000` those bits equal `2`.**
 
 Here’s the breakdown.
 
@@ -493,8 +493,8 @@ In Sv39, a **virtual address** is broken into:
 
 So they are *symmetrical in the sense of width* (9 bits per level), but not the same fields:
 
-* VPN bits \[38:30], \[29:21], \[20:12] are from the **VA**.
-* PPN bits \[53:28], \[27:19], \[18:10] are from the **PA** stored in the PTE.
+* VPN bits [38:30], [29:21], [20:12] are from the **VA**.
+* PPN bits [53:28], [27:19], [18:10] are from the **PA** stored in the PTE.
 
 ---
 
@@ -508,17 +508,17 @@ PA = 0x0000_0000_8020_0000
 ```
 
 * VA → VPN2=2, VPN1=1, VPN0=0.
-* L2\[2] points to L1\_id.
-* L1\_id\[1] = PTE with PPN = (0x8020\_0000 >> 12) = 0x8020.
+* L2[2] points to L1_id.
+* L1_id[1] = PTE with PPN = (0x8020_0000 >> 12) = 0x8020.
 * That PTE has flags (V,R,W,X).
 * On translation, hardware says:
-  “VPN0=0 → offset=0 → final PA = PPN<<12 + offset = 0x8020\_0000”.
+  “VPN0=0 → offset=0 → final PA = PPN<<12 + offset = 0x8020_0000”.
 
 ---
 
 ✅ **Answer to your question**
 
-* The VA’s VPN bits \[38:30], \[29:21], \[20:12] are **not** the PPN in the PTE.
+* The VA’s VPN bits [38:30], [29:21], [20:12] are **not** the PPN in the PTE.
 * They are the **indices** to *find* the PTEs.
 * The **PPN** field in the PTE is what tells you the **physical page number** (PA >> 12) of the frame being mapped.
 
@@ -638,18 +638,18 @@ Physical RAM (low portion)
 It has 512 entries (`L2[0..511]`). Each is 64 bits.
 
 * `L2[2] = PTE(ppn=0x8040_1000>>12, V=1, R=W=X=0)`
-  → pointer to L1\_id.
+  → pointer to L1_id.
   (So VA in the **low half** near `0x8020_0000` uses this path.)
 
 * `L2[0x102] = PTE(ppn=0x8040_2000>>12, V=1, R=W=X=0)`
-  → pointer to L1\_hi.
+  → pointer to L1_hi.
   (So VA in the **high half** near `0xffff_ffc0_8020_0000` uses this path.)
 
 All other entries are 0 (invalid).
 
 ---
 
-### L1\_id (at PA `0x8040_1000`)
+### L1_id (at PA `0x8040_1000`)
 
 This is for identity mappings (VA == PA).
 
@@ -659,7 +659,7 @@ This is for identity mappings (VA == PA).
 
 ---
 
-### L1\_hi (at PA `0x8040_2000`)
+### L1_hi (at PA `0x8040_2000`)
 
 This is for higher-half kernel mappings.
 
@@ -675,13 +675,13 @@ This is for higher-half kernel mappings.
 
 * Translate VA `0x0000_0000_8020_0000`:
 
-  * VPN2=2 → pick `L2[2]` → points to L1\_id.
+  * VPN2=2 → pick `L2[2]` → points to L1_id.
   * VPN1=1 → pick `L1_id[1]` → leaf with PPN=`0x8020_0000>>12`.
   * Result = PA `0x8020_0000`.
 
 * Translate VA `0xffff_ffc0_8020_0000`:
 
-  * VPN2=0x102 → pick `L2[0x102]` → points to L1\_hi.
+  * VPN2=0x102 → pick `L2[0x102]` → points to L1_hi.
   * VPN1=1 → pick `L1_hi[1]` → leaf with same PPN.
   * Result = PA `0x8020_0000`.
 
@@ -712,11 +712,11 @@ Physical RAM @ 0x8040_0000:
 
 ---
 
-👉 Do you want me to also show the **bit fields of one actual PTE value** (e.g. the exact 64-bit hex value stored in `L1_hi[1]` for `0x8020_0000`)? That way you can see the PPN shifted into bits \[53:10] and the flags in \[9:0].
+👉 Do you want me to also show the **bit fields of one actual PTE value** (e.g. the exact 64-bit hex value stored in `L1_hi[1]` for `0x8020_0000`)? That way you can see the PPN shifted into bits [53:10] and the flags in [9:0].
 
 
 Alright, let’s build one actual **64-bit PTE value** in full detail.
-We’ll take your case: mapping **VA = 0xffff\_ffc0\_8020\_0000** to **PA = 0x0000\_0000\_8020\_0000** using a **2 MiB leaf at L1**.
+We’ll take your case: mapping **VA = 0xffff_ffc0_8020_0000** to **PA = 0x0000_0000_8020_0000** using a **2 MiB leaf at L1**.
 
 ---
 
@@ -756,7 +756,7 @@ That’s bits:
     1 1 1 0 1 1 1 1
 ```
 
-\= binary `1110_1111` = hex **0xEF**
+= binary `1110_1111` = hex **0xEF**
 
 ---
 
