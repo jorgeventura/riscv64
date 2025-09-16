@@ -1035,6 +1035,59 @@ void map_4k_region(uint64_t L2tbl[512], uint64_t L1tbl[512],
   ```
 
 ## Notes / gotchas
+---
+You are absolutely correct to be confused—the description you found is **incorrect** for Sv39's memory layout. Your intuition is spot on.
+
+Let's break down why it's wrong and what the correct ranges are.
+
+---
+
+### The Key Rule: Canonical Addresses
+
+The core of the issue lies in the **canonical address** requirement for Sv39. A 64-bit virtual address is only valid if bits 63 down to 39 are all identical to bit 38. This is essentially a sign-extension of the 39th bit (bit 38) into the upper part of the address.
+
+* If **bit 38 is 0**, then bits 39 through 63 **must all be 0**.
+* If **bit 38 is 1**, then bits 39 through 63 **must all be 1**.
+
+Any address that violates this rule is non-canonical and will immediately cause a page-fault exception.
+
+### Why the Provided Description is Wrong
+
+Let's look at the upper bound you were given for the "Positive Half": `0x0000_007F_FFFF_FFFF`.
+
+Let's examine the bits around the boundary:
+* The hexadecimal digit `7` corresponds to the binary `0111`.
+* These four bits represent bits 39, 38, 37, and 36.
+
+So, for this address:
+* **Bit 39 is 0**
+* **Bit 38 is 1**
+
+This is a direct violation of the canonical address rule. Since bit 38 is `1`, bit 39 (and all higher bits) should also be `1`. Because they are not, `0x0000_007F_FFFF_FFFF` is an invalid, non-canonical address.
+
+---
+
+### The Correct Address Space Ranges ✅
+
+The 39-bit virtual address space ($2^{39}$ bytes = 512 GiB) is split into two 256 GiB halves separated by a massive invalid "hole".
+
+#### **Positive Half (Lower 256 GiB)**
+This is where bit 38 is `0`.
+* **Lowest Address:** `0x0000_0000_0000_0000`
+* **Highest Address:** This is where bit 38 is `0` and all lower bits (37-0) are `1`.
+    * In binary, the upper bits look like: `...0000 0011 1111...` (Bit 39=`0`, Bit 38=`0`, Bit 37=`1`, Bit 36=`1`).
+    * This gives the correct upper bound: **`0x0000_003F_FFFF_FFFF`**
+* **Range:** `0x0000_0000_0000_0000` to `0x0000_003F_FFFF_FFFF`
+
+#### **Negative Half (Upper 256 GiB)**
+This is where bit 38 is `1`.
+* **Lowest Address:** This is where bits 63-38 are `1` and all lower bits (37-0) are `0`.
+    * In binary, the upper bits look like: `...1111 1100 0000...` (Bit 39=`1`, Bit 38=`1`, Bit 37=`0`, Bit 36=`0`).
+    * This gives the correct lower bound: **`0xFFFF_FFC0_0000_0000`**
+* **Highest Address:** `0xFFFF_FFFF_FFFF_FFFF`
+* **Range:** `0xFFFF_FFC0_0000_0000` to `0xFFFF_FFFF_FFFF_FFFF`
+
+In summary, you were right to question the ranges. The description you had was incorrect because it described a single, contiguous 512 GiB block, which is not how Sv39 works due to the canonical addressing requirement.
 
 * L0 tables are allocated per **VPN1 slot** you touch. The tiny pool above can cover up to `L0_POOL_CAP * 2 MiB` of 4 KiB mappings at once. Bump `L0_POOL_CAP` as needed.
 * Pointer vs leaf:
