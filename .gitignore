@@ -1,10 +1,1 @@
-mmu_Sv39/build/CMakeCache.txt
-mmu_Sv39/build/CMakeFiles/
-mmu_Sv39/build/build.ninja
-mmu_Sv39/build/cmake_install.cmake
-mmu_Sv39/build/kernel.bin
-mmu_Sv39/build/kernel.debug
-mmu_Sv39/build/kernel.elf
-mmu_Sv39/build/kernel.map
-mmu_Sv39/build/kernel.sym
-
+mmu_Sv39/build
