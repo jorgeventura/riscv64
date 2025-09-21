@@ -28,7 +28,7 @@ extern char kernel_phys_start[];
 extern char kernel_phys_end[];
 #define KERNEL_PHYS_BASE ((uint64_t)kernel_phys_start)
 #define KERNEL_SIZE      ((uint64_t)(kernel_phys_end - kernel_phys_start))
-// KERNEL_VIRT_BASE 0xffff_ffc000000000UL  // example in Sv39 high half
+// KERNEL_VIRT_BASE 0xffff_ffc0_0000_0000UL  // example in Sv39 high half
 #define KERNEL_VIRT_BASE 0xffffffc000000000UL  // example in Sv39 high half
 
 // Map a 1GiB superpage at level 2 (if aligned), else fall back to 2MiB pages, etc.
