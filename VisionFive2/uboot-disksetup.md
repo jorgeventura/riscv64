@@ -1,4 +1,4 @@
-The disk configuration was based on ChatGPT deduction from uboot environment.
+# The disk configuration was based on ChatGPT deduction from uboot environment.
 
 Yes — your U-Boot env basically *tells you* the disk layout it expects.
 
@@ -106,3 +106,110 @@ That’s it. Eject the card and boot. U-Boot will scan `mmc0`, find `extlinux/ex
 * **Gentoo specifics**: once booted, you can keep `/boot` on the same ext4 partition as `/` (simple) or split later. The env does not force a split.
 
 If you want, share your kernel/DTB paths and I’ll pre-fill an `extlinux.conf` that matches your exact locations and kernel args (e.g., enabling your preferred console, loglevel, cgroups, etc.).
+
+# What exactly is extlinux.conf ?
+
+extlinux.conf is a plain-text **boot menu/config file** (Syslinux/EXTLINUX format) that U-Boot’s *distro boot* logic knows how to read. It tells U-Boot which **kernel** to load, which **DTB** (device tree) to use, an optional **initramfs**, and the kernel **cmdline**.
+
+Why it matters on your VF2
+
+* Your env sets `boot_syslinux_conf=extlinux/extlinux.conf` and `boot_prefixes="/ /boot/"`, so U-Boot scans the bootable partition for:
+
+  * `/extlinux/extlinux.conf` **or** `/boot/extlinux/extlinux.conf`
+* When found, U-Boot runs `sysboot … ${boot_syslinux_conf}` and boots according to that file (no GRUB/EFI needed).
+
+What goes in it (common directives)
+
+* `timeout <seconds>` – menu delay before default boots
+* `default <label>` – which entry boots by default
+* `label <name>` … block for one boot option:
+
+  * `menu label <text>` – entry text
+  * `kernel <path>` – kernel image (e.g., `/boot/Image`)
+  * `initrd <path>` – optional initramfs
+  * `devicetree <path>` **or** `fdt <path>` – DTB file
+
+    * Alternative: `fdtdir <dir>` and U-Boot will append `${fdtfile}` from env
+  * `append <args>` – kernel command line
+
+Minimal example for your VisionFive 2
+
+```conf
+timeout 3
+default gentoo
+menu title Gentoo on VisionFive 2
+
+label gentoo
+  menu label Gentoo
+  kernel /boot/Image
+  devicetree /dtbs/starfive/starfive_visionfive2.dtb
+  append console=ttyS0,115200 earlycon=sbi root=/dev/mmcblk0p3 rootwait rw
+```
+
+Variant using `fdtdir` (lets env `fdtfile=starfive/starfive_visionfive2.dtb` pick the DTB):
+
+```conf
+timeout 3
+default gentoo
+
+label gentoo
+  menu label Gentoo (auto DTB)
+  kernel /boot/Image
+  fdtdir /dtbs
+  # initrd /boot/initramfs.cpio.gz
+  append console=ttyS0,115200 earlycon=sbi root=/dev/mmcblk0p3 rootwait rw
+```
+
+Notes & tips
+
+* Paths are relative to the **root of the boot partition** that holds `extlinux.conf`.
+* You can define multiple `label` blocks to keep different kernels or cmdlines.
+* From the U-Boot prompt you can test directly:
+
+  ```
+  sysboot mmc 0:3 any ${scriptaddr} /boot/extlinux/extlinux.conf
+  ```
+* Using `extlinux.conf` on ext4 is fine; no separate FAT/ESP is required unless you choose an EFI flow.
+
+
+# Where this file should be installed ? I do we need the other two partitions ?
+Short version:
+
+* **Where to put `extlinux.conf`:** on the **bootable Linux filesystem partition** of the SD card (the one that also holds your kernel). U-Boot will look in either:
+
+  * `/extlinux/extlinux.conf`, or
+  * `/boot/extlinux/extlinux.conf`
+
+  So, for example:
+
+  ```
+  /mnt/vf2/boot/extlinux/extlinux.conf     # works
+  # or
+  /mnt/vf2/extlinux/extlinux.conf          # also works
+  ```
+
+* **Do you need the other two partitions (`loader1`, `loader2`)?**
+  **No**—not for the normal “distro-boot from SD” flow when your VF2 already has U-Boot in SPI flash (your env shows `bootmode=flash`). Those partitions are reserved for early-stage loaders on media; most users leave them empty. They do **no harm** if present, but they aren’t required to boot a kernel via `extlinux.conf`.
+
+---
+
+### What I recommend
+
+* **Simplest (works fine):** one ext4 partition on the SD (mark it bootable), put:
+
+  ```
+  /boot/Image
+  /dtbs/starfive/starfive_visionfive2.dtb
+  /boot/extlinux/extlinux.conf
+  ```
+* **Max-compat (matches the vendor numbering):** three GPT partitions where #3 is the Linux filesystem (“system”). Put the same files above on **partition 3**. This aligns with env bits like `fatbootpart=1:3` but isn’t strictly necessary for the extlinux path.
+
+Tip to test from U-Boot prompt:
+
+```
+sysboot mmc 0:3 any ${scriptaddr} /boot/extlinux/extlinux.conf
+# or if you used the other path
+sysboot mmc 0:3 any ${scriptaddr} /extlinux/extlinux.conf
+```
+
+
