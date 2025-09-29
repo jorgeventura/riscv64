@@ -8,15 +8,15 @@ The most common and open-source way to do this on Linux is with **USB/IP**.
 
 ### Using USB/IP for Network-Based USB Passthrough
 
-USB/IP works by creating a server on the machine with the physical USB device (your Gentoo client) and a client inside the virtual machine.1 The VM's kernel is tricked into thinking the network-attached USB device is physically plugged in.2
+USB/IP works by creating a server on the machine with the physical USB device (your Gentoo client) and a client inside the virtual machine.1 The VM's kernel is tricked into thinking the network-attached USB device is physically plugged in.
 
 Here is the general workflow to get it set up:
 
 #### 1. On Your Gentoo Client (The "Server")
 
-This is the machine where your USB device is physically connected.3
+This is the machine where your USB device is physically connected.
 
-1. **Install USB/IP Tools:** Emerge the necessary package.4
+1. **Install USB/IP Tools:** Emerge the necessary package.
 
    ```Bash
    sudo emerge --ask sys-apps/usbip
@@ -32,8 +32,24 @@ This is the machine where your USB device is physically connected.3
    ```Bash
    sudo usbipd -d
    ```
+   3.1 **systemd configuration service**
+   ```
+   [Unit]
+   Description=USB/IP Server Daemon
+   After=network.target
 
-4. **List Local USB Devices:** Find the busid of the device you want to share.
+   [Service]
+   Type=forking
+   ExecStart=/usr/sbin/usbipd -D
+   ExecStop=/usr/bin/killall usbipd
+   Restart=on-failure
+   RestartSec=5
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+5. **List Local USB Devices:** Find the busid of the device you want to share.
 
    ```Bash
    usbip list --local
@@ -54,9 +70,9 @@ This is the machine where your USB device is physically connected.3
 
 ---
 
-#### **\#\#\# 2\. Inside Your Proxmox VM (The "Client")**
+#### 2. Inside Your Proxmox VM (The "Client")**
 
-Now, configure your Gentoo VM to attach to the shared device.5
+Now, configure your Gentoo VM to attach to the shared device.
 
 1. **Install USB/IP Tools:** You need the same user-space tools inside the VM.
 
@@ -64,7 +80,7 @@ Now, configure your Gentoo VM to attach to the shared device.5
    sudo emerge --ask sys-apps/usbip
    ```
 
-3. **Load Kernel Module:** Load the virtual host controller module.6
+3. **Load Kernel Module:** Load the virtual host controller module.
 
    ```Bash
    sudo modprobe vhci-hcd
@@ -76,7 +92,7 @@ Now, configure your Gentoo VM to attach to the shared device.5
    usbip list --remote=<IP_OF_YOUR_GENTOO_CLIENT>
    ```
 
-6. **Attach the Device:** Use the IP address and the busid to attach the remote device to your VM.7
+6. **Attach the Device:** Use the IP address and the busid to attach the remote device to your VM.
 
    ```Bash
    sudo usbip attach --remote=<IP_OF_YOUR_GENTOO_CLIENT> --busid=1-4
@@ -86,7 +102,7 @@ After running the attach command, you can run dmesg or lsusb inside your VM. You
 
 ---
 
-### **\#\# Alternative Option: VirtualHere**
+### **Alternative Option: VirtualHere**
 
 If you run into issues with USB/IP or want a more polished, commercial solution, **VirtualHere** is a popular alternative.
 
