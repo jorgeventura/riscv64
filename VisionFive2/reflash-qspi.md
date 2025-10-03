@@ -1,4 +1,155 @@
-Great catch on both points.
+
+# Compile bundle it with OpenSBI, and boot it **from microSD** without touching QSPI. Here’s the clean, upstream-friendly path that works great on the VisionFive 2 (JH7110).
+
+---
+
+# 1) Toolchain + env
+
+```bash
+# Example prefixes; use your actual cross toolchain
+export CROSS_COMPILE=riscv64-unknown-linux-gnu-
+export ARCH=riscv
+```
+
+---
+
+# 2) Build OpenSBI (FW_DYNAMIC)
+
+Build a generic OpenSBI **fw_dynamic.bin** (no payload yet). U-Boot will pack this into a FIT image later.
+
+```bash
+git clone https://github.com/riscv/opensbi.git
+cd opensbi
+make PLATFORM=generic FW_TEXT_START=0x40000000
+# result: build/platform/generic/firmware/fw_dynamic.bin
+```
+
+(Yes, VisionFive 2 uses GENERIC platform here; upstream U-Boot expects `fw_dynamic.bin`.) ([U-Boot Documentation][1])
+
+---
+
+# 3) Build U-Boot for VisionFive 2
+
+```bash
+cd ..
+git clone https://source.denx.de/u-boot/u-boot.git
+cd u-boot
+# VisionFive 2 defconfig:
+make starfive_visionfive2_defconfig
+
+# Point U-Boot build at the OpenSBI fw_dynamic.bin you built above:
+make -j$(nproc) OPENSBI=../opensbi/build/platform/generic/firmware/fw_dynamic.bin
+```
+
+This produces:
+
+* **`spl/u-boot-spl.bin.normal.out`** (the SPL)
+* **`u-boot.itb`** (a FIT image that already contains OpenSBI + U-Boot) ([U-Boot Documentation][1])
+
+> Notes:
+>
+> * Upstream U-Boot now ships **`u-boot.itb`** as the OpenSBI+U-Boot bundle. Older StarFive docs sometimes call a similar file `visionfive2_fw_payload.img`; use `u-boot.itb` when building upstream as above. ([U-Boot Documentation][1])
+
+---
+
+# 4) Prepare a **microSD** with the right GPT layout
+
+The ROM/SPL expect two raw partitions:
+
+* **Partition 1** (SPL): type GUID `2E54B353-1271-4842-806F-E436D6AF6985`
+* **Partition 2** (FIT / U-Boot+OpenSBI): type GUID `BC13C2FF-59E6-4262-A352-B275FD6F7172`
+
+Example (replace `/dev/sdX` with your card device):
+
+```bash
+sudo wipefs -a /dev/sdX
+sudo sgdisk -og /dev/sdX
+
+# p1: small (say 4 MiB) for SPL
+sudo sgdisk -n1:2048:+4M  -t1:2E54B353-1271-4842-806F-E436D6AF6985 -c1:"spl"
+
+# p2: small (say 16 MiB) for FIT (u-boot.itb)
+sudo sgdisk -n2:0:+16M   -t2:BC13C2FF-59E6-4262-A352-B275FD6F7172 -c2:"uboot"
+
+sudo partprobe /dev/sdX
+```
+
+Those GUIDs and the “SPL in p1 / FIT in p2” expectations are documented in the upstream U-Boot VisionFive 2 page. ([U-Boot Documentation][1])
+
+---
+
+# 5) Write your freshly built images to the partitions
+
+```bash
+# Write SPL to p1
+sudo dd if=spl/u-boot-spl.bin.normal.out of=/dev/sdX1 conv=fsync
+
+# Write FIT (OpenSBI+U-Boot) to p2
+sudo dd if=u-boot.itb of=/dev/sdX2 conv=fsync
+sync
+```
+
+StarFive’s quick-start similarly shows writing SPL to `p1` and the payload to `p2`. ([RVspace Documentation Center][2])
+
+---
+
+# 6) Boot from SD (no QSPI changes)
+
+* Set the VF2 boot DIP/SW to **SD boot**.
+* Connect serial, power on.
+* You should see your new U-Boot banner (build date, git hash).
+
+StarFive’s docs cover the boot-mode switch location and SD boot details. ([RVspace Documentation Center][3])
+
+---
+
+## Alternative: build a “payload” via OpenSBI instead of U-Boot FIT
+
+If you prefer the older StarFive flow:
+
+```bash
+# Build U-Boot first to get u-boot.bin
+make -j$(nproc)
+
+# Then build OpenSBI with U-Boot as payload:
+cd ../opensbi
+make PLATFORM=generic FW_TEXT_START=0x40000000 \
+     FW_PAYLOAD_PATH=../u-boot/u-boot.bin
+# result: build/.../fw_payload.bin
+
+# Some StarFive guides then convert/rename to visionfive2_fw_payload.img,
+# but with upstream U-Boot it's simpler to use u-boot.itb as above.
+```
+
+This “FW_PAYLOAD_PATH” technique is the standard OpenSBI payload method, used widely (VF2 docs and U-Boot board docs show it). ([RVspace Documentation Center][4])
+
+---
+
+## Verify & iterate
+
+At the U-Boot prompt:
+
+```bash
+version
+bdinfo
+printenv
+```
+
+If all looks good booting from SD, you can later flash the same **SPL** and **u-boot.itb** into QSPI at offsets `0x0` and `0x100000` respectively (via `sf probe; sf update ...`). ([en.opensuse.org][5])
+
+---
+
+If you want, tell me your exact toolchain prefix (you’re on Gentoo with crossdev, right?) and I’ll drop in a ready-to-paste script that builds OpenSBI + U-Boot and writes the card in one go.
+
+[1]: https://docs.u-boot.org/en/latest/board/starfive/visionfive2.html?utm_source=chatgpt.com "StarFive VisionFive2 - The U-Boot Documentation"
+[2]: https://doc-en.rvspace.org/VisionFive2/Quick_Start_Guide/VisionFive2_SDK_QSG/updating_spl_and_u_boot_of_sd_card_and_emmc.html?utm_source=chatgpt.com "Updating SPL and U-Boot of SD Card and eMMC"
+[3]: https://doc-en.rvspace.org/VisionFive2/Boot_UG/VisionFive2_SDK_QSG/boot_mode_settings.html?utm_source=chatgpt.com "VisionFive 2 Boot Mode Settings"
+[4]: https://doc-en.rvspace.org/VisionFive2/SWTRM/VisionFive2_SW_TRM/compiling_opensbi%20-%20vf2.html?utm_source=chatgpt.com "Compiling OpenSBI"
+[5]: https://en.opensuse.org/VisionFive2%3ATips?utm_source=chatgpt.com "VisionFive2:Tips"
+
+
+
+# Prepare to reflash QSPI
 
 1. **MMC index** — if your microSD shows up as **mmc 1**, just use `mmc 1:<part>` everywhere (e.g., `mmc 1:3`).
 
