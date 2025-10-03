@@ -50,6 +50,7 @@ find_program(CROSS_OBJCOPY ${TRIPLE}-objcopy REQUIRED)
 find_program(CROSS_OBJDUMP ${TRIPLE}-objdump REQUIRED)
 find_program(CROSS_STRIP   ${TRIPLE}-strip   REQUIRED)
 find_program(CROSS_NM      ${TRIPLE}-nm      REQUIRED)
+find_program(CTAGS	   ctags	     REQUIRED)
 
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_C_COMPILER   ${CROSS_GCC})
@@ -102,6 +103,7 @@ set_target_properties(kernel.elf PROPERTIES
 
 # ====== Post-build: split symbols & raw bin ======
 add_custom_command(TARGET kernel.elf POST_BUILD
+  COMMAND ${CTAGS} -R ${CMAKE_SOURCE_DIR}/*
   COMMAND ${CROSS_OBJCOPY} --only-keep-debug kernel.elf kernel.debug
   COMMAND ${CROSS_STRIP} -g kernel.elf
   COMMAND ${CROSS_OBJCOPY} --add-gnu-debuglink=kernel.debug kernel.elf

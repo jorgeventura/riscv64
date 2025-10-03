@@ -10,6 +10,10 @@
 #define PTE_A (1UL<<6)
 #define PTE_D (1UL<<7)
 
+#define	_2MiB	(2UL<<20)
+#define _1KiB	(1UL<<10)
+#define	_4KiB	(1UL<<12)
+
 #define SATP_MODE_SV39 (8UL << 60)
 static inline void sfence_vma_all(void){ asm volatile("sfence.vma x0, x0" ::: "memory"); }
 
@@ -23,6 +27,8 @@ static inline uint64_t pte_make(uint64_t ppn, uint64_t flags){ return (ppn << 10
 static uint64_t __attribute__((aligned(PGSIZE))) L2[512]; // root
 static uint64_t __attribute__((aligned(PGSIZE))) L1_hi[512];
 static uint64_t __attribute__((aligned(PGSIZE))) L1_id[512];
+static uint64_t __attribute__((aligned(PGSIZE))) L0_hi[512];
+static uint64_t __attribute__((aligned(PGSIZE))) L0_id[512];
 
 extern char kernel_phys_start[];
 extern char kernel_phys_end[];
@@ -43,11 +49,30 @@ static void map_2m_region(uint64_t L2tbl[], uint64_t L1tbl[],
     L2tbl[i2] = pte_make(l1_ppn, PTE_V); // pointer PTE (no R/W/X)
 
     // Fill L1 leaf entries for 2MiB pages
-    uint64_t pages2m = (length + (2UL<<20) - 1) / (2UL<<20);
+    uint64_t pages2m = (length + _2MiB - 1) / _2MiB;
     for(uint64_t i=0;i<pages2m;i++){
-        uint64_t va = va_base + i*(2UL<<20);
+        uint64_t va = va_base + i*_2MiB;
         int i1 = vpn1(va);
-        uint64_t ppn_2m = (pa_base + i*(2UL<<20)) >> 12;
+        uint64_t ppn_2m = (pa_base + i*_2MiB) >> 12;
+        // Level-1 leaf with R/W/X
+        L1tbl[i1] = pte_make(ppn_2m, flags | PTE_V | PTE_A | PTE_D | PTE_R | PTE_W | PTE_X);
+    }
+}
+
+static void map_4k_region(uint64_t L2tbl[], uint64_t L1tbl[], uint64_t L0tbl[],
+                          uint64_t va_base, uint64_t pa_base, uint64_t length, uint64_t flags)
+{
+    // Install L1 pointer in L2
+    int i2 = vpn2(va_base);
+    uint64_t l1_ppn = ((uint64_t)L1tbl) >> 12;
+    L2tbl[i2] = pte_make(l1_ppn, PTE_V); // pointer PTE (no R/W/X)
+
+    // Fill L1 with entries for 2MiB pages
+    uint64_t pages2m = (length + _2MiB - 1) / _2MiB;
+    for(uint64_t i=0;i<pages2m;i++){
+        uint64_t va = va_base + i*_2MiB;
+        int i1 = vpn1(va);
+        uint64_t ppn_2m = (pa_base + i*_2MiB) >> 12;
         // Level-1 leaf with R/W/X
         L1tbl[i1] = pte_make(ppn_2m, flags | PTE_V | PTE_A | PTE_D | PTE_R | PTE_W | PTE_X);
     }
@@ -56,15 +81,15 @@ static void map_2m_region(uint64_t L2tbl[], uint64_t L1tbl[],
 void enable_paging_and_jump(void (*virt_entry)(void))
 {
     // Zero tables
-    for(int i=0;i<512;i++){ L2[i]=0; L1_hi[i]=0; L1_id[i]=0; }
+    for(int i=0;i<512;i++){ L2[i]=0; L1_hi[i]=0; L1_id[i]=0; L0_hi[i]=0; L0_id[i]=0;}
 
     // 1) Identity map a small window covering our current code/stack (say 4 MiB)
-    const uint64_t id_pa = (uint64_t)kernel_phys_start & ~((2UL<<20)-1);
-    const uint64_t id_len = 4UL<<20; // keep small
+    const uint64_t id_pa = (uint64_t)kernel_phys_start & ~(_2MiB-1);
+    const uint64_t id_len = 2*_2MiB; // keep small
     map_2m_region(L2, L1_id, id_pa, id_pa, id_len, /*flags*/0);
 
     // 2) Higher-half map the kernel image
-    const uint64_t k_pa = KERNEL_PHYS_BASE & ~((2UL<<20)-1);
+    const uint64_t k_pa = KERNEL_PHYS_BASE & ~(_2MiB-1);
     const uint64_t k_len = (KERNEL_SIZE + ((KERNEL_PHYS_BASE - k_pa))) ;
     map_2m_region(L2, L1_hi, KERNEL_VIRT_BASE, k_pa, k_len, /*flags*/0);
 
