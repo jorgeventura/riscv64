@@ -172,7 +172,7 @@ Notes & tips
 * Using `extlinux.conf` on ext4 is fine; no separate FAT/ESP is required unless you choose an EFI flow.
 
 
-# Where this file should be installed ? I do we need the other two partitions ?
+# Where this file should be installed ? Do we need the other two partitions ?
 Short version:
 
 * **Where to put `extlinux.conf`:** on the **bootable Linux filesystem partition** of the SD card (the one that also holds your kernel). U-Boot will look in either:
