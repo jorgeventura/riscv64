@@ -14,9 +14,9 @@ Yes — your U-Boot env basically *tells you* the disk layout it expects.
 
   with the GUIDs:
 
-  * `type_guid_gpt_loader1 = 2E54B353-1271-4842-806F-E436D6AF6985`
-  * `type_guid_gpt_loader2 = BC13C2FF-59E6-4262-A352-B275FD6F7172`
-  * `type_guid_gpt_system  = EBD0A0A2-B9E5-4433-87C0-68B6B72699C7` (Linux filesystem)
+  * `type_guid_gpt_loader1 = 2E54B353-1271-4842-806F-E436D6AF6985` (HiFive BBL)
+  * `type_guid_gpt_loader2 = BC13C2FF-59E6-4262-A352-B275FD6F7172` (Linux extended boot)
+  * `type_guid_gpt_system  = 0FC63DAF-8483-4772-8E79-3D69D8477DE4` (Linux filesystem)
 
 * It boots from `mmc0` (`boot_targets=mmc0 dhcp`) and looks for **distro boot**:
 
