@@ -66,10 +66,10 @@ sudo wipefs -a /dev/sdX
 sudo sgdisk -og /dev/sdX
 
 # p1: small (say 4 MiB) for SPL
-sudo sgdisk -n1:2048:+4M  -t1:2E54B353-1271-4842-806F-E436D6AF6985 -c1:"spl"
+sudo sgdisk /dev/sdX -n1:2048:+4M -t1:2E54B353-1271-4842-806F-E436D6AF6985 -c1:"spl"
 
 # p2: small (say 16 MiB) for FIT (u-boot.itb)
-sudo sgdisk -n2:0:+16M   -t2:BC13C2FF-59E6-4262-A352-B275FD6F7172 -c2:"uboot"
+sudo sgdisk /dev/sdX -n2:0:+16M -t2:BC13C2FF-59E6-4262-A352-B275FD6F7172 -c2:"uboot"
 
 sudo partprobe /dev/sdX
 ```
@@ -202,4 +202,3 @@ And again—thanks for flagging the address overlap confusion. The sequential **
 
 [1]: https://docs.u-boot.org/en/latest/board/starfive/visionfive2.html "StarFive VisionFive2 — Das U-Boot unknown version documentation"
 [2]: https://docs.u-boot.org/en/latest/usage/cmd/sf.html?utm_source=chatgpt.com "sf command — Das U-Boot unknown version documentation"
-
