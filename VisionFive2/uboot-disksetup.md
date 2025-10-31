@@ -14,8 +14,8 @@ Yes — your U-Boot env basically *tells you* the disk layout it expects.
 
   with the GUIDs:
 
-  * `type_guid_gpt_loader1 = 2E54B353-1271-4842-806F-E436D6AF6985` (HiFive BBL)
-  * `type_guid_gpt_loader2 = BC13C2FF-59E6-4262-A352-B275FD6F7172` (Linux extended boot)
+  * `type_guid_gpt_loader1 = 5B193300-FC78-40CD-8002-E86C45580B47` (HiFive FSBL)
+  * `type_guid_gpt_loader2 = 2E54B353-1271-4842-806F-E436D6AF6985` (HiFi BBL)
   * `type_guid_gpt_system  = 0FC63DAF-8483-4772-8E79-3D69D8477DE4` (Linux filesystem)
 
 * It boots from `mmc0` (`boot_targets=mmc0 dhcp`) and looks for **distro boot**:
@@ -46,9 +46,9 @@ sudo sgdisk --zap-all /dev/sdX
 
 # GPT + three partitions
 sudo sgdisk \
-  --new=1:34:+1MiB        --change-name=1:loader1 --typecode=1:2E54B353-1271-4842-806F-E436D6AF6985 \
-  --new=2:0:+4MiB         --change-name=2:loader2 --typecode=2:BC13C2FF-59E6-4262-A352-B275FD6F7172 \
-  --new=3:0:0             --change-name=3:system  --typecode=3:EBD0A0A2-B9E5-4433-87C0-68B6B72699C7 \
+  --new=1:34:+1MiB        --change-name=1:loader1 --typecode=1:5B193300-FC78-40CD-8002-E86C45580B47 \
+  --new=2:0:+4MiB         --change-name=2:loader2 --typecode=2:2E54B353-1271-4842-806F-E436D6AF6985 \
+  --new=3:0:0             --change-name=3:system  --typecode=3:0FC63DAF-8483-4772-8E79-3D69D8477DE4 \
   /dev/sdX
 
 # Mark p3 bootable (legacy BIOS bootable attribute in GPT — matches env's "bootable")
