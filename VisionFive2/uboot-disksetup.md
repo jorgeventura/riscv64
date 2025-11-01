@@ -49,6 +49,7 @@ You **do not need** a separate FAT/ESP unless you really want to boot via UEFI c
 sudo sgdisk --zap-all /dev/sdX
 
 # GPT + three partitions
+# The name is required because u-boot expect the names loader1,loader2 and system.
 sudo sgdisk \
   --set-alignment=2 \
   --new=1:34:+2M --change-name=1:loader1 --typecode=1:2E54B353-1271-4842-806F-E436D6AF6985 \
