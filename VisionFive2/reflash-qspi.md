@@ -20,7 +20,7 @@ Build a generic OpenSBI **fw_dynamic.bin** (no payload yet). U-Boot will pack th
 ```bash
 git clone https://github.com/riscv/opensbi.git
 cd opensbi
-make PLATFORM=generic FW_TEXT_START=0x40000000
+make PLATFORM=generic FW_TEXT_START=0x40000000 FW_OPTIONS=0
 # result: build/platform/generic/firmware/fw_dynamic.bin
 ```
 
