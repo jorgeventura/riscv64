@@ -11,6 +11,9 @@ This guide documents the complete procedure to cross-compile binary packages on 
 `crossdev` requires an overlay repository to store target-specific toolchain ebuilds.
 
 1. Create `/etc/portage/repos.conf/crossdev.conf`:
+
+
+
 ```ini
 [crossdev]
 location = /var/db/repos/crossdev
@@ -20,8 +23,10 @@ auto-sync = no
 
 ```
 
-
 2. Initialize the repository structure:
+
+
+
 ```bash
 mkdir -p /var/db/repos/crossdev/{profiles,metadata}
 echo 'crossdev' > /var/db/repos/crossdev/profiles/repo_name
@@ -30,14 +35,14 @@ chown -R portage:portage /var/db/repos/crossdev
 
 ```
 
-
 3. Install `crossdev`:
+
+
+
 ```bash
 emerge -av sys-devel/crossdev
 
 ```
-
-
 
 ---
 
@@ -56,17 +61,90 @@ This creates the toolchain binaries (`riscv64-unknown-linux-gnu-gcc`, `riscv64-u
 
 ## 2. Target Sysroot Configuration (`amd64` Host)
 
-Target compilation settings are managed inside `/usr/riscv64-unknown-linux-gnu/etc/portage/`.
+### 2.1. Configure Repository Pointer
 
-### 2.1. Configure `make.conf`
+Ensure the target sysroot references the host Gentoo repository so profile management and package metadata resolve accurately:
+
+```bash
+mkdir -p /usr/riscv64-unknown-linux-gnu/etc/portage/repos.conf
+cat << 'EOF' > /usr/riscv64-unknown-linux-gnu/etc/portage/repos.conf/gentoo.conf
+[DEFAULT]
+main-repo = gentoo
+
+[gentoo]
+location = /var/db/repos/gentoo
+sync-type = rsync
+sync-uri = rsync://rsync.gentoo.org/gentoo-portage
+auto-sync = no
+EOF
+
+```
+
+---
+
+### 2.2. Convert Sysroot to Merged-Usr Layout
+
+By default, crossdev populates standard directories inside the sysroot (`/bin`, `/sbin`, `/lib`, `/lib64`). To align with Gentoo 23.0 merged-usr targets, migrate these paths into symlinks pointing to `/usr/*`:
+
+```bash
+SYSROOT="/usr/riscv64-unknown-linux-gnu"
+
+# 1. Create usr destinations
+mkdir -p "${SYSROOT}/usr/bin" "${SYSROOT}/usr/sbin" "${SYSROOT}/usr/lib" "${SYSROOT}/usr/lib64"
+
+# 2. Migrate existing files and replace base directories with symlinks
+for d in bin sbin lib lib64; do
+    if [ -d "${SYSROOT}/${d}" ] && [ ! -L "${SYSROOT}/${d}" ]; then
+        cp -a "${SYSROOT}/${d}/." "${SYSROOT}/usr/${d}/" 2>/dev/null || true
+        rm -rf "${SYSROOT}/${d}"
+        ln -s "usr/${d}" "${SYSROOT}/${d}"
+    fi
+done
+
+```
+
+Verify symlink convergence:
+
+```bash
+ls -ld /usr/riscv64-unknown-linux-gnu/{bin,sbin,lib,lib64}
+
+```
+
+---
+
+### 2.3. Query, Select, and Update the Profile
+
+Manage the target profile using `eselect` with `PORTAGE_CONFIGROOT` pointing to the target sysroot:
+
+1. **List Available Target Profiles:**
+
+```bash
+PORTAGE_CONFIGROOT=/usr/riscv64-unknown-linux-gnu ROOT=/ eselect profile list
+
+```
+
+2. **Select the Systemd Target Profile:**
+Set profile `8` (`default/linux/riscv/23.0/rv64/lp64d/systemd`):
+
+```bash
+PORTAGE_CONFIGROOT=/usr/riscv64-unknown-linux-gnu ROOT=/ eselect profile set default/linux/riscv/23.0/rv64/lp64d/systemd
+
+```
+
+3. **Verify the Selected Profile:**
+
+```bash
+PORTAGE_CONFIGROOT=/usr/riscv64-unknown-linux-gnu ROOT=/ eselect profile show
+
+```
+
+---
+
+### 2.4. Configure Target `make.conf`
 
 Edit `/usr/riscv64-unknown-linux-gnu/etc/portage/make.conf`:
 
 ```bash
-# Note: profile variables are set/overridden in profile/ files:
-# etc/portage/profile/use.force (overrides kernel_* USE variables)
-# etc/portage/profile/make.defaults (overrides ARCH, KERNEL, ELIBC variables)
-
 CHOST=riscv64-unknown-linux-gnu
 CBUILD=x86_64-pc-linux-gnu
 
@@ -74,48 +152,49 @@ ROOT=/usr/${CHOST}/
 
 ACCEPT_KEYWORDS="${ARCH} ~${ARCH}"
 
-USE="${ARCH} ssl openssl zlib -test -introspection"
+USE="${ARCH} ssl openssl zlib systemd -test -introspection"
 
-CFLAGS="-O2 -pipe -fomit-frame-pointer"
+CFLAGS="-O2 -pipe -march=rv64gc -mabi=lp64d"
 CXXFLAGS="${CFLAGS}"
 
 FEATURES="-collision-protect sandbox buildpkg noman noinfo nodoc"
-# Be sure we dont overwrite pkgs from another repo..
 PKGDIR=${ROOT}var/cache/binpkgs/
 PORTAGE_TMPDIR=${ROOT}tmp/
 
 # Python targets for sysroot
 PYTHON_TARGETS="python3_14"
 PYTHON_SINGLE_TARGET="python3_14"
+
 ```
 
 ---
 
-### 2.2. Common Cross-Compilation Sysroot Workarounds
+### 2.5. Common Package USE Flags & Config Updates
 
-1. **`sys-apps/util-linux` (`su` / `pam` constraint):**
+1. **Package USE Customizations:**
+
 ```bash
 mkdir -p /usr/riscv64-unknown-linux-gnu/etc/portage/package.use
 echo "sys-apps/util-linux -su" >> /usr/riscv64-unknown-linux-gnu/etc/portage/package.use/util-linux
-
-```
-
-
-2. **`net-misc/curl` (`quic` / `ssl` constraint):**
-```bash
 echo "net-misc/curl ssl openssl" >> /usr/riscv64-unknown-linux-gnu/etc/portage/package.use/curl
+echo "sys-apps/dbus systemd" >> /usr/riscv64-unknown-linux-gnu/etc/portage/package.use/dbus
+echo "sys-cluster/keepalived systemd" >> /usr/riscv64-unknown-linux-gnu/etc/portage/package.use/keepalived
 
 ```
 
+2. **Merge Sysroot Profile Configuration Updates:**
 
-3. **Managing sysroot `etc-update` changes:**
-When Portage writes autounmask config updates into the sysroot, merge them using:
 ```bash
 ROOT="/usr/riscv64-unknown-linux-gnu" etc-update --automode -3
 
 ```
 
+3. **Update Base Target Sysroot:**
 
+```bash
+riscv64-unknown-linux-gnu-emerge -avuDN @world
+
+```
 
 ---
 
@@ -178,39 +257,26 @@ emaint binhost -f
 
 ```
 
-### 3.3. Export and sync the eix cache
+---
+
+### 3.3. Export and Sync the Eix Cache
 
 #### 1. On the `amd64` Build Host
-
-Create the compressed `.tar.bz2` archive containing the host's `portage.eix` and place it in the HTTP web root:
 
 ```bash
 mkdir -p /tmp/eix-export
 cp /var/cache/eix/portage.eix /tmp/eix-export/
 tar -cjf /usr/riscv64-unknown-linux-gnu/var/cache/binpkgs/remote.tar.bz2 -C /tmp/eix-export portage.eix
 rm -rf /tmp/eix-export
+
 ```
 
-#### 2. On the VisionFive 2 (`pptgentoo`)
-
-Use `eix-remote fetch` with the `-a` (address) flag to download the archive to `/var/cache/eix/remote.tar.bz2`, then add it:
+#### 2. On the VisionFive 2 (`riscv64`)
 
 ```bash
-# Fetch from your binhost HTTP server:
 eix-remote -a http://192.168.51.17:8080/remote.tar.bz2 fetch
-
-# Merge it into the local database:
 eix-remote add
-```
 
-*(Alternatively, `eix-remote -a [http://192.168.51.17:8080/remote.tar.bz2](http://192.168.51.17:8080/remote.tar.bz2) update` runs both `fetch` and `add` in a single pass).*
-
-#### 3. Searching the remote database
-
-Once imported, use `-R` to search the remote repository entries:
-
-```bash
-eix -R <package-name>
 ```
 
 ---
@@ -218,8 +284,6 @@ eix -R <package-name>
 ## 4. VisionFive 2 Client Configuration
 
 ### 4.1. Configure Binary Repositories (`binrepos.conf`)
-
-Configure Portage to query the official Gentoo binary repository first, falling back to your local `amd64` cross-build host overlay.
 
 Create `/etc/portage/binrepos.conf/gentoobinhost.conf`:
 
@@ -249,14 +313,12 @@ CXXFLAGS="${COMMON_FLAGS}"
 FCFLAGS="${COMMON_FLAGS}"
 FFLAGS="${COMMON_FLAGS}"
 
-# Automatically pull binary packages
 FEATURES="${FEATURES} getbinpkg"
 
 USE="-introspection"
 LC_MESSAGES=C.utf8
 MAKEOPTS="-j4 -l4"
 
-# Enforce binary-only installations (fails if no binary exists instead of compiling locally)
 EMERGE_DEFAULT_OPTS="${EMERGE_DEFAULT_OPTS} --usepkgonly"
 
 ```
@@ -265,38 +327,19 @@ EMERGE_DEFAULT_OPTS="${EMERGE_DEFAULT_OPTS} --usepkgonly"
 
 ## 5. Cross-Compiling the VisionFive 2 Linux Kernel
 
-You can cross-compile mainline/vendor kernels on the `amd64` host in minutes using your crossdev toolchain.
+### 5.1. Fetch Source & Set Kernel Configuration
 
-Mainline:
 ```bash
 git clone https://github.com/torvalds/linux.git /usr/riscv64-unknown-linux-gnu/usr/src/linux-mainline
-```
-
-Vendor:
-```bash
-git clone https://github.com/starfive-tech/linux.git /usr/riscv64-unknown-linux-gnu/usr/src/linux-starfive
-```
-
-### 5.1. Configure Drivers (Built-in WireGuard & IPv6)
-
-Inside the kernel source tree on the `amd64` host:
-
-Mainline:
-```bash
-# Generate base config
+cd /usr/riscv64-unknown-linux-gnu/usr/src/linux-mainline
 make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- defconfig
+
 ```
 
-Vendor:
-```bash
-# Generate base config from vendor
-make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
-```
-
+Enable required subsystem, firewall, scheduling, and cgroup options:
 
 ```bash
-
-# For libvirtd (Optional)
+# VirtIO & Storage
 ./scripts/config --enable CONFIG_VIRTIO
 ./scripts/config --enable CONFIG_VIRTIO_PCI
 ./scripts/config --enable CONFIG_VIRTIO_BLK
@@ -305,33 +348,14 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 ./scripts/config --enable CONFIG_SERIAL_8250
 ./scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
 
-# Enable IPv6
-./scripts/config --enable CONFIG_IPV6
-./scripts/config --enable CONFIG_IPV6_MULTIPLE_TABLES
-./scripts/config --enable CONFIG_IPV6_SUBTREES
-./scripts/config --enable CONFIG_IP6_NF_IPTABLES
-./scripts/config --enable CONFIG_NF_TABLES_IPV6
-
-# Core WireGuard driver
+# Core WireGuard & Networking
 ./scripts/config --enable CONFIG_NET_CORE
 ./scripts/config --enable CONFIG_INET
 ./scripts/config --enable CONFIG_NET
 ./scripts/config --enable CONFIG_WIREGUARD
-
-# Cryptographic and hashing primitives required by WireGuard
-./scripts/config --enable CONFIG_CRYPTO
-./scripts/config --enable CONFIG_CRYPTO_LIB_CHACHA20POLY1305
-./scripts/config --enable CONFIG_CRYPTO_LIB_POLY1305
-./scripts/config --enable CONFIG_CRYPTO_LIB_CURVE25519
-./scripts/config --enable CONFIG_CRYPTO_LIB_BLAKE2S
-
-# Networking routing and tunneling dependencies
 ./scripts/config --enable CONFIG_NET_UDP_TUNNEL
 ./scripts/config --enable CONFIG_IP_ADVANCED_ROUTER
 ./scripts/config --enable CONFIG_IP_MULTIPLE_TABLES
-./scripts/config --enable CONFIG_IPV6_MULTIPLE_TABLES
-
-# Packet filtering and firewall markers (needed for fwmark / wg-quick routing)
 ./scripts/config --enable CONFIG_NETFILTER
 ./scripts/config --enable CONFIG_NETFILTER_ADVANCED
 ./scripts/config --enable CONFIG_NETFILTER_XT_MARK
@@ -339,83 +363,70 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 ./scripts/config --enable CONFIG_NF_TABLES
 ./scripts/config --enable CONFIG_NFT_COMPAT
 
-# Core IPv6 networking
+# WireGuard Crypto Primitives
+./scripts/config --enable CONFIG_CRYPTO
+./scripts/config --enable CONFIG_CRYPTO_LIB_CHACHA20POLY1305
+./scripts/config --enable CONFIG_CRYPTO_LIB_POLY1305
+./scripts/config --enable CONFIG_CRYPTO_LIB_CURVE25519
+./scripts/config --enable CONFIG_CRYPTO_LIB_BLAKE2S
+
+# Full IPv6 Subsystem & Netfilter
 ./scripts/config --enable CONFIG_IPV6
+./scripts/config --enable CONFIG_IPV6_MULTIPLE_TABLES
+./scripts/config --enable CONFIG_IPV6_SUBTREES
 ./scripts/config --enable CONFIG_IPV6_ROUTER_PREF
 ./scripts/config --enable CONFIG_IPV6_ROUTE_INFO
 ./scripts/config --enable CONFIG_IPV6_OPTIMISTIC_DAD
-
-# IPv6 routing tables & policy routing (needed for wg-quick AllowedIPs / default routes)
-./scripts/config --enable CONFIG_IPV6_MULTIPLE_TABLES
-./scripts/config --enable CONFIG_IPV6_SUBTREES
-
-# Netfilter / nftables IPv6 support (needed for fwmark & iptables/nftables rules)
 ./scripts/config --enable CONFIG_NF_TABLES_IPV6
 ./scripts/config --enable CONFIG_IP6_NF_IPTABLES
-./scripts/config --enable CONFIG_IP6_NF_MATCH_AH
-./scripts/config --enable CONFIG_IP6_NF_MATCH_EUI64
-./scripts/config --enable CONFIG_IP6_NF_MATCH_FRAG
-./scripts/config --enable CONFIG_IP6_NF_MATCH_OPTS
-./scripts/config --enable CONFIG_IP6_NF_MATCH_HL
-./scripts/config --enable CONFIG_IP6_NF_MATCH_IPV6HEADER
-./scripts/config --enable CONFIG_IP6_NF_MATCH_MH
-./scripts/config --enable CONFIG_IP6_NF_MATCH_RPFILTER
-./scripts/config --enable CONFIG_IP6_NF_MATCH_RT
 ./scripts/config --enable CONFIG_IP6_NF_FILTER
 ./scripts/config --enable CONFIG_IP6_NF_MANGLE
-```
 
-```bash
+# Packet Scheduler & Debug
+./scripts/config --enable CONFIG_MAGIC_SYSRQ
+./scripts/config --enable CONFIG_NET_SCH_FQ_CODEL
+./scripts/config --enable CONFIG_NET_SCHED
+./scripts/config --set-str CONFIG_DEFAULT_NET_SCH "fq_codel"
 
-# Resolve config dependencies
+# Unified Cgroups v2 & Systemd Monitoring
+./scripts/config --enable CONFIG_CGROUPS
+./scripts/config --enable CONFIG_INOTIFY_USER
+./scripts/config --enable CONFIG_FANOTIFY
+./scripts/config --enable CONFIG_MEMCG
+./scripts/config --enable CONFIG_BLK_CGROUP
+./scripts/config --enable CONFIG_CGROUP_SCHED
+./scripts/config --enable CONFIG_FAIR_GROUP_SCHED
+./scripts/config --enable CONFIG_CFS_BANDWIDTH
+./scripts/config --enable CONFIG_CGROUP_PIDS
+./scripts/config --enable CONFIG_CGROUP_FREEZER
+./scripts/config --enable CONFIG_CGROUP_DEVICE
+./scripts/config --enable CONFIG_CGROUP_CPUACCT
+./scripts/config --enable CONFIG_CGROUP_PERF
+./scripts/config --enable CONFIG_CGROUP_BPF
+./scripts/config --enable CONFIG_SOCK_CGROUP_DATA
+./scripts/config --enable CONFIG_PSI
+
+# Resolve dependencies
 make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- olddefconfig
 
 ```
 
 ---
 
-### 5.2. Compile Kernel and Modules
+### 5.2. Compile and Deploy Kernel
 
 ```bash
-# Build Kernel Image
-make -j$(nproc) ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- Image
+# Build Kernel & Modules
+make -j$(nproc) ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- Image modules
+make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- INSTALL_MOD_PATH=/tmp/riscv-modules modules_install
 
-# Build Modules
-make -j$(nproc) ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- modules
-
-# Stage modules into a temporary directory for transfer
-make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- \
-     INSTALL_MOD_PATH=/tmp/vf2-modules \
-     modules_install
-
-```
-
----
-
-### 5.3. Deploy to the Board
-
-1. **Kernel Image:** Copy `arch/riscv/boot/Image` to `/boot/` on the VisionFive 2.
-
-```bash
+# Copy Kernel Image
 scp arch/riscv/boot/Image root@192.168.51.61:/boot/Image-7.2.0-rc7
-```
 
-
-
-2. **Kernel Modules:** Sync modules to `/lib/modules/`:
-```bash
-rsync -avz -e "ssh -p 22" /tmp/riscv-modules/lib/modules/ root@<VF2_IP:/lib/modules/
-```
-
-Ex:
-```bash
+# Copy Modules & Run depmod on Target
 rsync -avz -e "ssh -p 22" /tmp/riscv-modules/lib/modules/ root@192.168.51.61:/lib/modules/
-```
+ssh root@192.168.51.61 "depmod -a"
 
-
-3. **Update dependencies on the VF2:**
-```bash
-depmod -a
 ```
 
 ---
