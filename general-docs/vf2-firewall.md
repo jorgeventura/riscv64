@@ -23,9 +23,7 @@ This document details the configuration required to deploy the VisionFive 2 (`ri
 Cross-compile the required service daemons and firewall stack:
 
 ```bash
-riscv64-unknown-linux-gnu-emerge -av sys-cluster/keepalived \
-    net-misc/radvd net-dns/dnsmasq app-admin/firewalld
-
+riscv64-unknown-linux-gnu-emerge -av sys-cluster/keepalived net-misc/radvd net-dns/dnsmasq
 emaint binhost -f
 ```
 
@@ -35,8 +33,7 @@ Sync metadata and install the pre-built binaries:
 
 ```bash
 emaint binhost -s
-emerge -avK sys-cluster/keepalived \
-    net-misc/radvd net-dns/dnsmasq app-admin/firewalld
+emerge -avK sys-cluster/keepalived net-misc/radvd net-dns/dnsmasq
 ```
 ---
 

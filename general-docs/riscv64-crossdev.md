@@ -107,7 +107,6 @@ Verify symlink convergence:
 
 ```bash
 ls -ld /usr/riscv64-unknown-linux-gnu/{bin,sbin,lib,lib64}
-
 ```
 
 ---
@@ -120,7 +119,6 @@ Manage the target profile using `eselect` with `PORTAGE_CONFIGROOT` pointing to 
 
 ```bash
 PORTAGE_CONFIGROOT=/usr/riscv64-unknown-linux-gnu ROOT=/ eselect profile list
-
 ```
 
 2. **Select the Systemd Target Profile:**
@@ -128,14 +126,12 @@ Set profile `8` (`default/linux/riscv/23.0/rv64/lp64d/systemd`):
 
 ```bash
 PORTAGE_CONFIGROOT=/usr/riscv64-unknown-linux-gnu ROOT=/ eselect profile set default/linux/riscv/23.0/rv64/lp64d/systemd
-
 ```
 
 3. **Verify the Selected Profile:**
 
 ```bash
 PORTAGE_CONFIGROOT=/usr/riscv64-unknown-linux-gnu ROOT=/ eselect profile show
-
 ```
 
 ---
@@ -327,16 +323,42 @@ EMERGE_DEFAULT_OPTS="${EMERGE_DEFAULT_OPTS} --usepkgonly"
 
 ## 5. Cross-Compiling the VisionFive 2 Linux Kernel
 
+You can cross-compile mainline/vendor kernels on the amd64 host in minutes using your crossdev toolchain.
+
 ### 5.1. Fetch Source & Set Kernel Configuration
+
+#### 5.1.1. Option 1: From the mainline
 
 ```bash
 git clone https://github.com/torvalds/linux.git /usr/riscv64-unknown-linux-gnu/usr/src/linux-mainline
-cd /usr/riscv64-unknown-linux-gnu/usr/src/linux-mainline
+```
+Create the linux symlink.
+```bash
+ln -s /usr/riscv64-unknown-linux-gnu/usr/src/linux-mainline /usr/riscv64-unknown-linux-gnu/usr/src/linux
+```
+Configure the kernel.
+```bash
+cd /usr/riscv64-unknown-linux-gnu/usr/src/linux
 make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- defconfig
-
 ```
 
-Enable required subsystem, firewall, scheduling, and cgroup options:
+#### 5.1.2. Option 2: From the StarFive vendor
+
+```bash
+git clone https://github.com/starfive-tech/linux.git /usr/riscv64-unknown-linux-gnu/usr/src/linux-starfive
+```
+
+Create the linux symlink.
+```bash
+ln -s /usr/riscv64-unknown-linux-gnu/usr/src/linux-starfive /usr/riscv64-unknown-linux-gnu/usr/src/linux
+```
+
+```bash
+cd /usr/riscv64-unknown-linux-gnu/usr/src/linux-starfive
+make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
+```
+
+### 5.1.3 Enable required subsystem, firewall, scheduling, and cgroup options
 
 ```bash
 # VirtIO & Storage
@@ -405,22 +427,31 @@ Enable required subsystem, firewall, scheduling, and cgroup options:
 ./scripts/config --enable CONFIG_CGROUP_BPF
 ./scripts/config --enable CONFIG_SOCK_CGROUP_DATA
 ./scripts/config --enable CONFIG_PSI
+```
 
+```bash
 # Resolve dependencies
 make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- olddefconfig
-
 ```
 
 ---
 
 ### 5.2. Compile and Deploy Kernel
 
-```bash
-# Build Kernel & Modules
-make -j$(nproc) ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- Image modules
-make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- INSTALL_MOD_PATH=/tmp/riscv-modules modules_install
 
-# Copy Kernel Image
+Build Kernel & Modules & Device tree blobs
+```bash
+make -j$(nproc) ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- Image modules dtbs
+```
+```bash
+make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- INSTALL_MOD_PATH=/tmp/riscv-modules modules_install
+```
+```bash
+make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- INSTALL_DTBS_PATH=/tmp/riscv-dtbs dtbs_install
+```
+
+```bash
+# Copy Kernel Image (the name maybe different)
 scp arch/riscv/boot/Image root@192.168.51.61:/boot/Image-7.2.0-rc7
 
 # Copy Modules & Run depmod on Target
