@@ -384,6 +384,7 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 ./scripts/config --enable CONFIG_NETFILTER_XT_MATCH_MARK
 ./scripts/config --enable CONFIG_NF_TABLES
 ./scripts/config --enable CONFIG_NFT_COMPAT
+./scripts/config --enable CONFIG_NF_CT_NETLINK
 
 # WireGuard Crypto Primitives
 ./scripts/config --enable CONFIG_CRYPTO
@@ -433,7 +434,7 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 ./scripts/config --set-val CONFIG_I2C_CHARDEV y
 ./scripts/config --set-val CONFIG_I2C_DESIGNWARE_CORE y
 ./scripts/config --set-val CONFIG_I2C_DESIGNWARE_PLATFORM y
-
+```
 # Enable RTC subsystem & VisionFive 2 RTC chips built-in
 ./scripts/config --set-val CONFIG_RTC_CLASS y
 ./scripts/config --set-val CONFIG_RTC_HCTOSYS y
@@ -446,7 +447,6 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 ./scripts/config --set-val CONFIG_RTC_DRV_PCF8563 y
 ./scripts/config --set-val CONFIG_RTC_DRV_SD2405AL y
 ./scripts/config --set-val CONFIG_RTC_DRV_SD3078 y
-```
 
 ```bash
 # Resolve dependencies
