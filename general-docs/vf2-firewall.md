@@ -1,5 +1,7 @@
 # VisionFive 2 (`riscv64`) Standby Firewall & HA Configuration (`vf2-firewall.md`)
 
+#### The VisionFive2 HAS NO RTC
+
 This document details the configuration required to deploy the VisionFive 2 (`riscv64`) board as the High Availability backup node (`rem64`) for `fw1` using `firewalld` (or native `nftables`), `NetworkManager`, `keepalived`, `radvd`, and `dnsmasq`.
 
 ---

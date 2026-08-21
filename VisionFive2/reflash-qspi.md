@@ -20,9 +20,12 @@ Build a generic OpenSBI **fw_dynamic.bin** (no payload yet). U-Boot will pack th
 ```bash
 git clone https://github.com/riscv/opensbi.git
 cd opensbi
-make PLATFORM=generic FW_TEXT_START=0x40000000 FW_OPTIONS=0
-# result: build/platform/generic/firmware/fw_dynamic.bin
 ```
+
+```bash
+make PLATFORM=generic FW_TEXT_START=0x40000000 FW_OPTIONS=0
+```
+result: build/platform/generic/firmware/fw_dynamic.bin
 
 (Yes, VisionFive 2 uses GENERIC platform here; upstream U-Boot expects `fw_dynamic.bin`.) ([U-Boot Documentation][1])
 
@@ -34,9 +37,13 @@ make PLATFORM=generic FW_TEXT_START=0x40000000 FW_OPTIONS=0
 cd ..
 git clone https://source.denx.de/u-boot/u-boot.git
 cd u-boot
+```
+```bash
 # VisionFive 2 defconfig:
 make starfive_visionfive2_defconfig
+```
 
+```bash
 # Point U-Boot build at the OpenSBI fw_dynamic.bin you built above:
 make -j$(nproc) OPENSBI=../opensbi/build/platform/generic/firmware/fw_dynamic.bin
 ```
@@ -64,15 +71,34 @@ Example (replace `/dev/sdX` with your card device):
 ```bash
 sudo wipefs -a /dev/sdX
 sudo sgdisk -og /dev/sdX
+```
 
-# p1: small (say 4 MiB) for SPL
+### p1: small (say 4 MiB) for SPL
+```bash
 sudo sgdisk /dev/sdX -n1:2048:+4M -t1:2E54B353-1271-4842-806F-E436D6AF6985 -c1:"spl"
+```
 
-# p2: small (say 16 MiB) for FIT (u-boot.itb)
+### p2: small (say 16 MiB) for FIT (u-boot.itb)
+```bash
 sudo sgdisk /dev/sdX -n2:0:+16M -t2:BC13C2FF-59E6-4262-A352-B275FD6F7172 -c2:"uboot"
+```
 
+### p3: root filesyste
+```bash
+sudo sgdisk /dev/sdb -n3:0:0 -t3:0FC63DAF-8483-4772-8E79-3D69D8477DE4 -c3:"rootfs"
+```
+
+```bash
 sudo partprobe /dev/sdX
 ```
+
+### To extract the stage3 under p3
+Mount the partition
+
+```bash
+tar xpvf ~/stage3-*.tar.xz --xattrs-include='*.*' --numeric-owner
+```
+
 
 Those GUIDs and the “SPL in p1 / FIT in p2” expectations are documented in the upstream U-Boot VisionFive 2 page. ([U-Boot Documentation][1])
 
@@ -80,11 +106,13 @@ Those GUIDs and the “SPL in p1 / FIT in p2” expectations are documented in t
 
 # 5) Write your freshly built images to the partitions
 
+### Write SPL to p1
 ```bash
-# Write SPL to p1
 sudo dd if=spl/u-boot-spl.bin.normal.out of=/dev/sdX1 conv=fsync
+```
 
-# Write FIT (OpenSBI+U-Boot) to p2
+### Write FIT (OpenSBI+U-Boot) to p2
+```bash
 sudo dd if=u-boot.itb of=/dev/sdX2 conv=fsync
 sync
 ```

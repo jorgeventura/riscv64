@@ -427,6 +427,25 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 ./scripts/config --enable CONFIG_CGROUP_BPF
 ./scripts/config --enable CONFIG_SOCK_CGROUP_DATA
 ./scripts/config --enable CONFIG_PSI
+
+# Enable I2C core & controller drivers built-in
+./scripts/config --set-val CONFIG_I2C y
+./scripts/config --set-val CONFIG_I2C_CHARDEV y
+./scripts/config --set-val CONFIG_I2C_DESIGNWARE_CORE y
+./scripts/config --set-val CONFIG_I2C_DESIGNWARE_PLATFORM y
+
+# Enable RTC subsystem & VisionFive 2 RTC chips built-in
+./scripts/config --set-val CONFIG_RTC_CLASS y
+./scripts/config --set-val CONFIG_RTC_HCTOSYS y
+./scripts/config --set-str CONFIG_RTC_HCTOSYS_DEVICE "rtc0"
+./scripts/config --set-val CONFIG_RTC_SYSTOHC y
+./scripts/config --set-str CONFIG_RTC_SYSTOHC_DEVICE "rtc0"
+./scripts/config --set-val CONFIG_RTC_INTF_SYSFS y
+./scripts/config --set-val CONFIG_RTC_INTF_PROC y
+./scripts/config --set-val CONFIG_RTC_INTF_DEV y
+./scripts/config --set-val CONFIG_RTC_DRV_PCF8563 y
+./scripts/config --set-val CONFIG_RTC_DRV_SD2405AL y
+./scripts/config --set-val CONFIG_RTC_DRV_SD3078 y
 ```
 
 ```bash
@@ -451,12 +470,23 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- INSTALL_DTBS_PATH=/tmp/
 ```
 
 ```bash
+KREL=$(make -s kernelrelease)
+```
+
+```bash
 # Copy Kernel Image (the name maybe different)
-scp arch/riscv/boot/Image root@192.168.51.61:/boot/Image-7.2.0-rc7
+scp arch/riscv/boot/Image root@192.168.51.61:/boot/Image-${KREL}
+scp System.map root@192.168.51.61:/boot/System.map-${KREL}
+scp .config root@192.168.51.61:/boot/config-${KREL}
+
+# Copy Device Tree blobs
+rsync -avz -e "ssh -p 22" /tmp/riscv-dtbs/ root@192.168.51.61:/boot/dtbs/
 
 # Copy Modules & Run depmod on Target
 rsync -avz -e "ssh -p 22" /tmp/riscv-modules/lib/modules/ root@192.168.51.61:/lib/modules/
 ssh root@192.168.51.61 "depmod -a"
+
+
 
 ```
 
