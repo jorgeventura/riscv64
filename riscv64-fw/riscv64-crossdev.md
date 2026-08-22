@@ -457,11 +457,18 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 
 # TCP Option Clamping (tcp option maxseg size set rt mtu)
 ./scripts/config --enable CONFIG_NFT_SYNPROXY
-
 ```
+
+Resolve dependencies
 ```bash
-# Resolve dependencies
 make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- olddefconfig
+```
+
+### 5.1.4 Apply Device Tree Fixes for VisionFive 2 GMAC0
+
+Apply GMAC0 RGMII PHY clock timing fix
+```bash
+patch -p1 < /path/to/VisionFive2/0002-starfive-jh7110-gmac0-rgmii-phy-clock-fix.patch
 ```
 
 ---
@@ -490,9 +497,19 @@ scp System.map root@192.168.51.45:/boot/System.map-${KREL}
 scp .config root@192.168.51.45:/boot/config-${KREL}
 ```
 
+Update standard U-Boot symlink on target
+```bash
+ssh root@192.168.51.45 "ln -sf Image-${KREL} /boot/Image"
+```
+
 Copy Device Tree blobs
 ```bash
-rsync -avz -e "ssh -p 22" /tmp/riscv-dtbs/ root@192.168.51.45:/boot/dtbs/
+rsync -avz -e "ssh -p 22" /tmp/riscv-dtbs/starfive root@192.168.51.45:/boot/dtbs/starfive-${KREL}
+```
+
+Update standard U-Boot symlink on target for device tree
+```bash
+ssh root@192.168.51.45 "ln -sf starfive-${KREL} /boot/dtbs/starfive"
 ```
 
 Copy Modules & Run depmod on Target
@@ -500,7 +517,6 @@ Copy Modules & Run depmod on Target
 rsync -avz -e "ssh -p 22" /tmp/riscv-modules/lib/modules/ root@192.168.51.45:/lib/modules/
 ssh root@192.168.51.45 "depmod -a"
 ```
-
 ---
 
 ## 6. Day-to-Day Build & Deployment Workflow
