@@ -116,64 +116,18 @@ rc-service net.end1 start
 Ensure `dhcpcd` manages DHCPv4 and Prefix Delegation on `vlan0` when active, with the cloned DUID:
 
 ```conf
-<<<<<<< HEAD
-# Use the hardware address of the interface for the Client ID.
-#clientid
-# or
-# Use the same DUID + IAID as set in DHCPv6 for DHCPv4 ClientID as per RFC4361.
-# Some non-RFC compliant DHCP servers do not reply with this set.
-# In this case, comment out duid and enable clientid above.
-duid 00:03:00:01:00:01:2e:78:05:ac
-
-# Persist interface configuration when dhcpcd exits.
-persistent
-
-# vendorclassid is set to blank to avoid sending the default of
-# dhcpcd-<version>:<os>:<machine>:<platform>
-vendorclassid
-
-# A list of options to request from the DHCP server.
-option domain_name_servers, domain_name, domain_search
-option static_routes, classless_static_routes
-# Respect the network MTU. This is applied to DHCP routes.
-option interface_mtu
-
-# Request a hostname from the network
-option host_name
-
-# Most distributions have NTP support.
-#option ntp_servers
-
-# A ServerID is required by RFC2131.
-require dhcp_server_identifier
-
-# Generate SLAAC address using the Hardware Address of the interface
-#slaac hwaddr
-# OR generate Stable Private IPv6 Addresses based from the DUID
-slaac private
-
-# Add end1, end0, and VRRP interfaces to denyinterfaces
-denyinterfaces end0 end1 vrrp.*
-=======
 # Restrict dhcpcd to only the interfaces it needs to manage
 allowinterfaces vlan0 vrrp.53
 
 # Do not solicit router advertisements on the LAN
 noipv6rs vrrp.53
 nodad vrrp.53
->>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
 
 # Configure the WAN Interface
 interface vlan0
-<<<<<<< HEAD
-    ipv6rs
-    ia_na 1
-    ia_pd 1/::/56
-=======
   ipv6rs                 # Accept Router Advertisements from the ISP
   ia_na 1                # Request a normal global IPv6 address for the WAN interface
   ia_pd 2 vrrp.53/0      # Request a Prefix Delegation (/56) and assign Subnet 0 to vrrp.53
->>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
 ```
 
 ---
@@ -226,21 +180,16 @@ table inet filter {
         ct state established,related accept
 
         # Allow ICMP & ICMPv6 forwarding (Required for PMTU discovery)
-<<<<<<< HEAD
-        ip protocol icmp accept
-        ip6 nexthdr ipv6-icmp accept
-=======
         #ip protocol icmp accept
         #ip6 nexthdr ipv6-icmp accept
 
-	    # 1. Essential ICMP/ICMPv6 forwarding (Strictly for network health, PMTU, etc.)
+	# 1. Essential ICMP/ICMPv6 forwarding (Strictly for network health, PMTU, etc.)
         ip protocol icmp icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
         ip6 nexthdr ipv6-icmp icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem } accept
 
         # 2. Allow incoming Pings to LAN Global IPv6 Addresses
         # --> COMMENT OUT the line below to block the outside world from pinging your network!
         iifname "vlan0" ip6 nexthdr ipv6-icmp icmpv6 type echo-request accept
->>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
 
         # LAN to WAN forwarding (IPv4 & IPv6)
         iifname { "end1", "vrrp.52", "vrrp.53" } oifname "vlan0" accept
@@ -276,17 +225,6 @@ global_defs {
     vrrp_version 3
     enable_script_security
     script_user root
-    vrrp_garp_master_refresh 15
-}
-
-# Synchronize IPv4 and IPv6 state transitions together
-vrrp_sync_group VG_LAN {
-    group {
-        VI_LAN_IPV4
-        VI_LAN_IPV6
-    }
-    notify "/root/notify-keepalived.sh"
-    notify_stop "/root/notify-keepalived.sh GROUP VG_LAN STOP"
 }
 
 
@@ -303,13 +241,9 @@ vrrp_sync_group VG_LAN {
 # 1. LAN IPv4 Instance
 vrrp_instance VI_LAN_IPV4 {
     state BACKUP
-    interface end1
+    interface end1              
     virtual_router_id 52
-<<<<<<< HEAD
-    priority 120
-=======
     priority 205
->>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
     advert_int 1
     use_vmac vrrp.52
 
@@ -321,13 +255,9 @@ vrrp_instance VI_LAN_IPV4 {
 # 2. LAN IPv6 Instance
 vrrp_instance VI_LAN_IPV6 {
     state BACKUP
-    interface end1
+    interface end1              
     virtual_router_id 53
-<<<<<<< HEAD
-    priority 120
-=======
     priority 205
->>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
     advert_int 1
 
     use_vmac vrrp.53
@@ -344,7 +274,6 @@ vrrp_instance VI_LAN_IPV6 {
 ## 8. Router Advertisement Daemon (`/etc/radvd.conf`)
 
 ```conf
-vf2 ~ # cat /etc/radvd.conf 
 interface vrrp.53
 {
     AdvSendAdvert on;
@@ -353,13 +282,8 @@ interface vrrp.53
     AdvDefaultPreference high;
     AdvSourceLLAddress on;
 
-<<<<<<< HEAD
-   # Global IPv6 Prefix
-    prefix 2600:6c60:6640:117::/64
-=======
    # Global IPv6 Prefix "::/64" to dynamically copy the interface's prefix
     prefix ::/64
->>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
     {
         AdvOnLink on;
         AdvAutonomous on;
