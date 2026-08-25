@@ -51,8 +51,8 @@ net.ipv6.conf.vlan0.accept_ra = 0
 net.ipv6.conf.vlan0.autoconf = 0
 
 # LAN Interface Controls
-net.ipv6.conf.eth1.accept_ra = 0
-net.ipv6.conf.eth1.autoconf = 0
+net.ipv6.conf.end1.accept_ra = 2
+net.ipv6.conf.end1.autoconf = 1
 
 # Force immediate Neighbor Discovery updates when VRRP transitions
 net.ipv6.conf.all.ndisc_notify = 1
@@ -61,8 +61,8 @@ net.ipv6.conf.default.ndisc_notify = 1
 # Loose Reverse Path Filtering for Keepalived / VMAC compatibility (IPv4)
 net.ipv4.conf.all.rp_filter = 2
 net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.end1.rp_filter = 2
 net.ipv4.conf.vlan0.rp_filter = 2
-net.ipv4.conf.eth1.rp_filter = 2
 
 # Prevent host interfaces from responding to ARP for Virtual MAC addresses
 net.ipv4.conf.all.arp_ignore = 1
@@ -109,39 +109,6 @@ rc-service net.end0 start
 rc-service net.end1 start
 ```
 
-Configure NTP server:
-
-```bash
-rc-update add busybox-ntpd default
-```
-
-Configure syslogd:
-
-Edit the file /etc/conf.d/busybox-syslogd:
-
-```text
-# Options to pass to syslogd
-# -O: File to log to (default: /var/log/messages)
-# -s: Max file size in KB before rotating (e.g., 200KB)
-# -b: Number of rotated files to keep
-# -C: Use a circular memory buffer instead of disk writes (view with logread)
-SYSLOGD_OPTS="-O /var/log/messages -s 256 -b 2"
-
-# Options to pass to klogd (captures kernel printk messages into syslog)
-KLOGD_OPTS=""
-```
-
-```bash
-rc-update add busybox-syslogd default
-```
-
-Load macvlan Kernel Module at Boot:
-
-```bash
-echo "macvlan" > /etc/modules-load.d/network.conf
-rc-update add modules boot
-```
-
 ---
 
 ## 5. DHCPCD Configuration for WAN (`/etc/dhcpcd.conf`)
@@ -149,6 +116,7 @@ rc-update add modules boot
 Ensure `dhcpcd` manages DHCPv4 and Prefix Delegation on `vlan0` when active, with the cloned DUID:
 
 ```conf
+<<<<<<< HEAD
 # Use the hardware address of the interface for the Client ID.
 #clientid
 # or
@@ -186,12 +154,26 @@ slaac private
 
 # Add end1, end0, and VRRP interfaces to denyinterfaces
 denyinterfaces end0 end1 vrrp.*
+=======
+# Restrict dhcpcd to only the interfaces it needs to manage
+allowinterfaces vlan0 vrrp.53
 
-# WAN Interface configuration
+# Do not solicit router advertisements on the LAN
+noipv6rs vrrp.53
+nodad vrrp.53
+>>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
+
+# Configure the WAN Interface
 interface vlan0
+<<<<<<< HEAD
     ipv6rs
     ia_na 1
     ia_pd 1/::/56
+=======
+  ipv6rs                 # Accept Router Advertisements from the ISP
+  ia_na 1                # Request a normal global IPv6 address for the WAN interface
+  ia_pd 2 vrrp.53/0      # Request a Prefix Delegation (/56) and assign Subnet 0 to vrrp.53
+>>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
 ```
 
 ---
@@ -244,8 +226,21 @@ table inet filter {
         ct state established,related accept
 
         # Allow ICMP & ICMPv6 forwarding (Required for PMTU discovery)
+<<<<<<< HEAD
         ip protocol icmp accept
         ip6 nexthdr ipv6-icmp accept
+=======
+        #ip protocol icmp accept
+        #ip6 nexthdr ipv6-icmp accept
+
+	    # 1. Essential ICMP/ICMPv6 forwarding (Strictly for network health, PMTU, etc.)
+        ip protocol icmp icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
+        ip6 nexthdr ipv6-icmp icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem } accept
+
+        # 2. Allow incoming Pings to LAN Global IPv6 Addresses
+        # --> COMMENT OUT the line below to block the outside world from pinging your network!
+        iifname "vlan0" ip6 nexthdr ipv6-icmp icmpv6 type echo-request accept
+>>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
 
         # LAN to WAN forwarding (IPv4 & IPv6)
         iifname { "end1", "vrrp.52", "vrrp.53" } oifname "vlan0" accept
@@ -294,12 +289,27 @@ vrrp_sync_group VG_LAN {
     notify_stop "/root/notify-keepalived.sh GROUP VG_LAN STOP"
 }
 
+
+# Synchronize IPv4 and IPv6 state transitions together
+vrrp_sync_group VG_LAN {
+    group {
+        VI_LAN_IPV4
+        VI_LAN_IPV6
+    }
+    notify "/root/notify-keepalived.sh"
+    notify_stop "/root/notify-keepalived.sh GROUP VG_LAN STOP"
+}
+
 # 1. LAN IPv4 Instance
 vrrp_instance VI_LAN_IPV4 {
     state BACKUP
     interface end1
     virtual_router_id 52
+<<<<<<< HEAD
     priority 120
+=======
+    priority 205
+>>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
     advert_int 1
     use_vmac vrrp.52
 
@@ -313,13 +323,18 @@ vrrp_instance VI_LAN_IPV6 {
     state BACKUP
     interface end1
     virtual_router_id 53
+<<<<<<< HEAD
     priority 120
+=======
+    priority 205
+>>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
     advert_int 1
+
     use_vmac vrrp.53
     native_ipv6
 
     virtual_ipaddress {
-        fe80::1:254/64 dev end1
+        fe80::1:254/64 dev end1 nodad
     }
 }
 ```
@@ -329,6 +344,7 @@ vrrp_instance VI_LAN_IPV6 {
 ## 8. Router Advertisement Daemon (`/etc/radvd.conf`)
 
 ```conf
+vf2 ~ # cat /etc/radvd.conf 
 interface vrrp.53
 {
     AdvSendAdvert on;
@@ -337,8 +353,13 @@ interface vrrp.53
     AdvDefaultPreference high;
     AdvSourceLLAddress on;
 
+<<<<<<< HEAD
    # Global IPv6 Prefix
     prefix 2600:6c60:6640:117::/64
+=======
+   # Global IPv6 Prefix "::/64" to dynamically copy the interface's prefix
+    prefix ::/64
+>>>>>>> 54ba40a (Update VF2 firewall configuration for high availability)
     {
         AdvOnLink on;
         AdvAutonomous on;
@@ -366,23 +387,50 @@ logger -t keepalived-script "Script triggered: TYPE=$TYPE NAME=$NAME STATE=$STAT
 case "$STATE" in
     "MASTER")
         logger -t keepalived-script "Transitioning to MASTER - Starting net.vlan0, dnsmasq, and radvd"
+
+        # 1. Kill any existing or lingering dhcpcd instance
+        killall -9 dhcpcd 2>/dev/null || true
+        rm -f /run/dhcpcd/*.pid 2>/dev/null || true
+
+
+        # 2. Start parent interface & VLAN
+        ip link set end0 up
         rc-service net.vlan0 start 2>/dev/null || true
+
+	# Delete standby default route
+	ip -4 route del default via 192.168.51.254 dev end1 2>/dev/null || true
+	ip -6 route del default via fe80::1:254 dev end1 2>/dev/null || true
+
+	sleep 5
+
+        # 3. Start dedicated single dhcpcd daemon on vlan0
+        /sbin/dhcpcd -b -q --noarp vlan0
+
+        # 4. Start local network services
         rc-service dnsmasq restart 2>/dev/null || rc-service dnsmasq start 2>/dev/null || true
         rc-service radvd restart 2>/dev/null || rc-service radvd start 2>/dev/null || true
         ;;
 
     "BACKUP"|"FAULT"|"STOP")
         logger -t keepalived-script "Transitioning to $STATE - Tearing down net.vlan0, radvd, and dnsmasq"
+
+        # 1. Stop local services
         rc-service radvd stop 2>/dev/null || true
         rc-service dnsmasq stop 2>/dev/null || true
+
+        # 2. Release leases cleanly and stop dhcpcd
+        /sbin/dhcpcd -k vlan0 2>/dev/null || true
+        killall dhcpcd 2>/dev/null || true
+
+	sleep 5
+        # 3. Teardown VLAN and flush IPs
         rc-service net.vlan0 stop 2>/dev/null || true
         ip -4 addr flush dev vlan0 2>/dev/null || true
         ip -6 addr flush dev vlan0 scope global 2>/dev/null || true
-        ;;
 
-    *)
-        logger -t keepalived-script "Unknown state '$STATE' received."
-        exit 1
+	# Restore fallback default route
+	ip -4 route replace default via 192.168.51.254 dev end1 metric 1024 2>/dev/null || true
+	ip -6 route replace default via fe80::1:254 dev end1 metric 1024 2>/dev/null || true
         ;;
 esac
 exit 0
