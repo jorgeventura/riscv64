@@ -455,6 +455,11 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 ./scripts/config --enable CONFIG_NFT_NAT
 ./scripts/config --enable CONFIG_NFT_MASQ
 
+# Netfilter logs
+./scripts/config --set-val CONFIG_NF_LOG_SYSLOG m
+./scripts/config --set-val CONFIG_NFT_LOG m
+./scripts/config --set-val CONFIG_NFT_LIMIT m
+
 # TCP Option Clamping (tcp option maxseg size set rt mtu)
 ./scripts/config --enable CONFIG_NFT_SYNPROXY
 ```
