@@ -51,8 +51,8 @@ net.ipv6.conf.vlan0.accept_ra = 0
 net.ipv6.conf.vlan0.autoconf = 0
 
 # LAN Interface Controls
-net.ipv6.conf.end1.accept_ra = 2
-net.ipv6.conf.end1.autoconf = 1
+net.ipv6.conf.end1.accept_ra = 0
+net.ipv6.conf.end1.autoconf = 0
 
 # Force immediate Neighbor Discovery updates when VRRP transitions
 net.ipv6.conf.all.ndisc_notify = 1
@@ -67,6 +67,14 @@ net.ipv4.conf.vlan0.rp_filter = 2
 # Prevent host interfaces from responding to ARP for Virtual MAC addresses
 net.ipv4.conf.all.arp_ignore = 1
 net.ipv4.conf.all.arp_announce = 2
+
+# eth0 and vlan0 has the same mac address
+sysctl -w net.ipv6.conf.vlan0.accept_dad=0
+sysctl -w net.ipv6.conf.vlan0.dad_transmits=0
+
+# Ensure that background services can bind to the VIPs even if the router is currently the BACKUP
+net.ipv4.ip_nonlocal_bind = 1
+net.ipv6.ip_nonlocal_bind = 1
 ```
 
 Apply immediately:
@@ -121,13 +129,15 @@ allowinterfaces vlan0 vrrp.53
 
 # Do not solicit router advertisements on the LAN
 noipv6rs vrrp.53
-nodad vrrp.53
 
 # Configure the WAN Interface
 interface vlan0
   ipv6rs                 # Accept Router Advertisements from the ISP
   ia_na 1                # Request a normal global IPv6 address for the WAN interface
   ia_pd 2 vrrp.53/0      # Request a Prefix Delegation (/56) and assign Subnet 0 to vrrp.53
+
+interface vrrp.53
+  nodad
 ```
 
 ---
@@ -183,7 +193,7 @@ table inet filter {
         #ip protocol icmp accept
         #ip6 nexthdr ipv6-icmp accept
 
-	# 1. Essential ICMP/ICMPv6 forwarding (Strictly for network health, PMTU, etc.)
+        # 1. Essential ICMP/ICMPv6 forwarding (Strictly for network health, PMTU, etc.)
         ip protocol icmp icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
         ip6 nexthdr ipv6-icmp icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem } accept
 
@@ -241,7 +251,7 @@ vrrp_sync_group VG_LAN {
 # 1. LAN IPv4 Instance
 vrrp_instance VI_LAN_IPV4 {
     state BACKUP
-    interface end1              
+    interface end1
     virtual_router_id 52
     priority 205
     advert_int 1
@@ -255,7 +265,7 @@ vrrp_instance VI_LAN_IPV4 {
 # 2. LAN IPv6 Instance
 vrrp_instance VI_LAN_IPV6 {
     state BACKUP
-    interface end1              
+    interface end1
     virtual_router_id 53
     priority 205
     advert_int 1
