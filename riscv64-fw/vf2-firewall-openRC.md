@@ -302,61 +302,86 @@ Ensure `dnsmasq`, `radvd`, and `net.vlan0` are not in the default runlevel (`rc-
 #!/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+# 1. Prevent concurrent script execution using a file lock
+LOCKFILE="/run/keepalived-notify.lock"
+exec 200>"$LOCKFILE"
+flock -n 200 || {
+    logger -t keepalived-script "Another instance is running; exiting."
+    exit 0
+}
+
+# Redirect all script command outputs and errors to a debug log
+exec >> /tmp/notify-debug.log 2>&1
+set -x
+
 TYPE=$1
 NAME=$2
 STATE=$3
 
-logger -t keepalived-script "Script triggered: TYPE=$TYPE NAME=$NAME STATE=$STATE"
+logger -t keepalived-script "Executing: TYPE=$TYPE NAME=$NAME STATE=$STATE"
 
 case "$STATE" in
     "MASTER")
-        logger -t keepalived-script "Transitioning to MASTER - Starting net.vlan0, dnsmasq, and radvd"
+        logger -t keepalived-script "Handling MASTER state"
 
-        # 1. Kill any existing or lingering dhcpcd instance
-        killall -9 dhcpcd 2>/dev/null || true
-        rm -f /run/dhcpcd/*.pid 2>/dev/null || true
+        # Terminate any lingering dhcpcd
+        pkill -9 -x dhcpcd 2>/dev/null || killall -9 dhcpcd 2>/dev/null || true
+        rm -f /run/dhcpcd/*.pid /var/run/dhcpcd/*.pid 2>/dev/null || true
 
+        # Bring parent link UP
+        ip link set dev end0 up
 
-        # 2. Start parent interface & VLAN
-        ip link set end0 up
+        # Create vlan0 with tag 100 and spoofed MAC if absent
+        if ! ip link show dev vlan0 >/dev/null 2>&1; then
+            ip link add link end0 name vlan0 address 00:01:2e:78:05:ac type vlan id 100
+        fi
+        ip link set dev vlan0 up
+
+        # Sync OpenRC state
+        rc-service net.vlan0 zap 2>/dev/null || true
         rc-service net.vlan0 start 2>/dev/null || true
 
-	# Delete standby default route
-	ip -4 route del default via 192.168.51.254 dev end1 2>/dev/null || true
-	ip -6 route del default via fe80::1:254 dev end1 2>/dev/null || true
+        # Remove fallback routes
+        ip -4 route del default via 192.168.51.254 dev end1 2>/dev/null || true
+        ip -6 route del default via fe80::1:254 dev end1 2>/dev/null || true
 
-	sleep 5
+        sleep 2
 
-        # 3. Start dedicated single dhcpcd daemon on vlan0
+        # Start dedicated dhcpcd
         /sbin/dhcpcd -b -q --noarp vlan0
 
-        # 4. Start local network services
+        # Start services
         rc-service dnsmasq restart 2>/dev/null || rc-service dnsmasq start 2>/dev/null || true
         rc-service radvd restart 2>/dev/null || rc-service radvd start 2>/dev/null || true
         ;;
 
     "BACKUP"|"FAULT"|"STOP")
-        logger -t keepalived-script "Transitioning to $STATE - Tearing down net.vlan0, radvd, and dnsmasq"
+        logger -t keepalived-script "Handling $STATE state - Destroying vlan0"
 
-        # 1. Stop local services
-        rc-service radvd stop 2>/dev/null || true
-        rc-service dnsmasq stop 2>/dev/null || true
-
-        # 2. Release leases cleanly and stop dhcpcd
-        /sbin/dhcpcd -k vlan0 2>/dev/null || true
-        killall dhcpcd 2>/dev/null || true
-
-	sleep 5
-        # 3. Teardown VLAN and flush IPs
-        rc-service net.vlan0 stop 2>/dev/null || true
+        # 1. Immediately flush addresses and delete kernel VLAN interface FIRST
         ip -4 addr flush dev vlan0 2>/dev/null || true
         ip -6 addr flush dev vlan0 scope global 2>/dev/null || true
+        ip link set dev vlan0 down 2>/dev/null || true
+        ip link delete dev vlan0 2>/dev/null || true
 
-	# Restore fallback default route
-	ip -4 route replace default via 192.168.51.254 dev end1 metric 1024 2>/dev/null || true
-	ip -6 route replace default via fe80::1:254 dev end1 metric 1024 2>/dev/null || true
+        # 2. Shut down physical parent device
+        ip link set dev end0 down 2>/dev/null || true
+
+        # 3. Force-kill all running network daemons
+        killall -9 dhcpcd dnsmasq radvd 2>/dev/null || true
+        rm -rf /run/dhcpcd /var/run/dhcpcd
+
+        # 4. Clean and zap OpenRC states without waiting on processes
+        rc-service net.vlan0 zap 2>/dev/null || true
+        rc-service dnsmasq zap 2>/dev/null || true
+        rc-service radvd zap 2>/dev/null || true
+
+        # 5. Set fallback default routes
+        ip -4 route replace default via 192.168.51.254 dev end1 metric 1024 2>/dev/null || true
+        ip -6 route replace default via fe80::1:254 dev end1 metric 1024 2>/dev/null || true
         ;;
 esac
+
 exit 0
 ```
 
