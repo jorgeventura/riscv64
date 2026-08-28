@@ -68,10 +68,6 @@ net.ipv4.conf.vlan0.rp_filter = 2
 net.ipv4.conf.all.arp_ignore = 1
 net.ipv4.conf.all.arp_announce = 2
 
-# eth0 and vlan0 has the same mac address
-sysctl -w net.ipv6.conf.vlan0.accept_dad=0
-sysctl -w net.ipv6.conf.vlan0.dad_transmits=0
-
 # Ensure that background services can bind to the VIPs even if the router is currently the BACKUP
 net.ipv4.ip_nonlocal_bind = 1
 net.ipv6.ip_nonlocal_bind = 1
@@ -345,6 +341,14 @@ case "$STATE" in
         if ! ip link show dev vlan0 >/dev/null 2>&1; then
             ip link add link end0 name vlan0 address 00:01:2e:78:05:ac type vlan id 100
         fi
+
+        # We MUST apply these dynamically because OpenRC creates vlan0 AFTER boot sysctls run!
+        sysctl -w net.ipv6.conf.vlan0.accept_ra=0 2>/dev/null || true
+        sysctl -w net.ipv6.conf.vlan0.autoconf=0 2>/dev/null || true
+        sysctl -w net.ipv6.conf.vlan0.accept_dad=0 2>/dev/null || true
+        sysctl -w net.ipv6.conf.vlan0.dad_transmits=0 2>/dev/null || true
+        sysctl -w net.ipv4.conf.vlan0.rp_filter=2 2>/dev/null || true
+
         ip link set dev vlan0 up
 
         # Sync OpenRC state
@@ -370,9 +374,8 @@ case "$STATE" in
 
         # 1. Immediately flush addresses and delete kernel VLAN interface FIRST
         ip -4 addr flush dev vlan0 2>/dev/null || true
-        ip -6 addr flush dev vlan0 scope global 2>/dev/null || true
+        ip -6 addr flush dev vlan0 2>/dev/null || true
         ip link set dev vlan0 down 2>/dev/null || true
-        ip link delete dev vlan0 2>/dev/null || true
 
         # 2. Shut down physical parent device
         ip link set dev end0 down 2>/dev/null || true
