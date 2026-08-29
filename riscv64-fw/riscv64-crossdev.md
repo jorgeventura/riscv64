@@ -455,6 +455,12 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 ./scripts/config --enable CONFIG_NFT_NAT
 ./scripts/config --enable CONFIG_NFT_MASQ
 
+# Required by Wireguard
+./scripts/config --enable CONFIG_NFT_FIB
+./scripts/config --enable CONFIG_NFT_FIB_IPV4
+./scripts/config --enable CONFIG_NFT_FIB_IPV6
+./scripts/config --enable CONFIG_NF_CONNTRACK_MARK
+
 # Netfilter logs
 ./scripts/config --set-val CONFIG_NF_LOG_SYSLOG m
 ./scripts/config --set-val CONFIG_NFT_LOG m
