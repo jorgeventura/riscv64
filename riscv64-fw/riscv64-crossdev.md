@@ -461,6 +461,12 @@ make ARCH=riscv CROSS_COMPILE=riscv64-unknown-linux-gnu- visionfive_defconfig
 ./scripts/config --enable CONFIG_NFT_FIB_IPV6
 ./scripts/config --enable CONFIG_NF_CONNTRACK_MARK
 
+# Used by Wake On Lan
+./scripts/config --set-val CONFIG_NF_DUP_IPV4 m
+./scripts/config --set-val CONFIG_NF_DUP_IPV6 m
+./scripts/config --set-val CONFIG_NFT_DUP_IPV4 m
+./scripts/config --set-val CONFIG_NFT_DUP_IPV6 m
+
 # Netfilter logs
 ./scripts/config --set-val CONFIG_NF_LOG_SYSLOG m
 ./scripts/config --set-val CONFIG_NFT_LOG m
