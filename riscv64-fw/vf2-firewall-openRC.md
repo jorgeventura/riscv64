@@ -330,6 +330,12 @@ case "$STATE" in
     "MASTER")
         logger -t keepalived-script "Handling MASTER state"
 
+        # Kill any lingering watcher loop before starting a new one
+        if [ -f /run/dhcpcd-watcher.pid ]; then
+            kill -9 $(cat /run/dhcpcd-watcher.pid) 2>/dev/null || true
+            rm -f /run/dhcpcd-watcher.pid
+        fi
+
         # Terminate any lingering dhcpcd
         pkill -9 -x dhcpcd 2>/dev/null || killall -9 dhcpcd 2>/dev/null || true
         rm -f /run/dhcpcd/*.pid /var/run/dhcpcd/*.pid 2>/dev/null || true
@@ -361,8 +367,17 @@ case "$STATE" in
 
         sleep 2
 
-        # Start dedicated dhcpcd
-        /sbin/dhcpcd -b -q --noarp vlan0
+        # Start dedicated dhcpcd in a TRULY DETACHED watcher loop
+        # - setsid: Detaches from Keepalived process group
+        # - 200>&-: Closes the lock file descriptor so the lock releases when this script exits
+        # - >/dev/null: Closes stdout/stderr so Keepalived does not hang waiting for output
+        setsid bash -c '
+            while true; do
+                /sbin/dhcpcd -B -q --noarp vlan0
+                sleep 3
+            done
+        ' 200>&- </dev/null >/dev/null 2>&1 &
+        echo $! > /run/dhcpcd-watcher.pid
 
         # Start services
         rc-service dnsmasq restart 2>/dev/null || rc-service dnsmasq start 2>/dev/null || true
@@ -372,24 +387,30 @@ case "$STATE" in
     "BACKUP"|"FAULT"|"STOP")
         logger -t keepalived-script "Handling $STATE state - Destroying vlan0"
 
-        # 1. Immediately flush addresses and delete kernel VLAN interface FIRST
+        # 1. Kill the dhcpcd watcher loop FIRST so it doesn't respawn dhcpcd
+        if [ -f /run/dhcpcd-watcher.pid ]; then
+            kill -9 $(cat /run/dhcpcd-watcher.pid) 2>/dev/null || true
+            rm -f /run/dhcpcd-watcher.pid
+        fi
+
+        # 2. Immediately flush addresses and delete kernel VLAN interface FIRST
         ip -4 addr flush dev vlan0 2>/dev/null || true
         ip -6 addr flush dev vlan0 2>/dev/null || true
         ip link set dev vlan0 down 2>/dev/null || true
 
-        # 2. Shut down physical parent device
+        # 3. Shut down physical parent device
         ip link set dev end0 down 2>/dev/null || true
 
-        # 3. Force-kill all running network daemons
+        # 4. Force-kill all running network daemons
         killall -9 dhcpcd dnsmasq radvd 2>/dev/null || true
         rm -rf /run/dhcpcd /var/run/dhcpcd
 
-        # 4. Clean and zap OpenRC states without waiting on processes
+        # 5. Clean and zap OpenRC states without waiting on processes
         rc-service net.vlan0 zap 2>/dev/null || true
         rc-service dnsmasq zap 2>/dev/null || true
         rc-service radvd zap 2>/dev/null || true
 
-        # 5. Set fallback default routes
+        # 6. Set fallback default routes
         ip -4 route replace default via 192.168.51.254 dev end1 metric 1024 2>/dev/null || true
         ip -6 route replace default via fe80::1:254 dev end1 metric 1024 2>/dev/null || true
         ;;
